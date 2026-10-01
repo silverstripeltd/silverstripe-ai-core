@@ -179,6 +179,7 @@ vendor's own error text is only appended in dev mode.
 
 - `ScriptedProvider` replays queued replies (`ScriptedProvider::text()`, `toolUse()`,
   `toolUses()` or closures that receive the request and may throw) and records every request.
+  `always($reply)` answers every request after the queue is used up.
 - `StubProviderFactory` returns that provider for any settings and records the settings.
 
 ```php

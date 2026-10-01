@@ -160,6 +160,35 @@ class ScriptedProviderTest extends SapphireTest
         $this->assertStringContainsString(ScriptedProvider::GREETING, $provider->chat(self::request('b'))->getText());
     }
 
+    public function testAlwaysAnswersEveryRequestOnceTheQueueIsUsedUp(): void
+    {
+        $provider = new ScriptedProvider([ScriptedProvider::text('first')]);
+        $provider->always(ScriptedProvider::text('again'));
+
+        $this->assertSame('first', $provider->chat(self::request('a'))->getText());
+
+        foreach (['b', 'c', 'd'] as $text) {
+            $this->assertSame('again', $provider->chat(self::request($text))->getText());
+        }
+
+        $provider->always(static function (ChatRequest $request): ChatResponse {
+            throw ProviderException::transient('Overloaded: ' . $request->getLastUserText());
+        });
+
+        try {
+            $provider->chat(self::request('e'));
+            $this->fail('Expected a ProviderException');
+        } catch (ProviderException $exception) {
+            $this->assertTrue($exception->isTransient());
+            $this->assertSame('Overloaded: e', $exception->getMessage());
+        }
+
+        $this->assertCount(5, $provider->getRequests());
+        $provider->reset();
+        $this->expectException(ProviderException::class);
+        $provider->chat(self::request('f'));
+    }
+
     public function testResetClearsQueueAndRequests(): void
     {
         $provider = new ScriptedProvider([ScriptedProvider::text('a'), ScriptedProvider::text('b')]);

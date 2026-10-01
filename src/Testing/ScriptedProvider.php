@@ -58,6 +58,11 @@ class ScriptedProvider implements ChatProviderInterface
     private array $requests = [];
 
     /**
+     * Reply used for every request once the queue is empty, set by always().
+     */
+    private ChatResponse|Closure|null $always = null;
+
+    /**
      * @param array<int, ChatResponse|Closure> $responses Replayed in order; a Closure receives
      *     the ChatRequest and must return a ChatResponse
      * @param bool $fallbackToCanned Greet and echo instead of throwing once the queue is empty
@@ -103,6 +108,10 @@ class ScriptedProvider implements ChatProviderInterface
     {
         $this->requests[] = $request;
 
+        if ($this->queue === [] && $this->always !== null) {
+            return $this->resolve($this->always, $request);
+        }
+
         if ($this->queue === []) {
             if ($this->fallbackToCanned) {
                 return $this->canned($request);
@@ -114,8 +123,26 @@ class ScriptedProvider implements ChatProviderInterface
             ));
         }
 
-        $next = array_shift($this->queue);
+        return $this->resolve(array_shift($this->queue), $request);
+    }
 
+    /**
+     * Answers every request with this reply once the queued ones are used up, however many the
+     * caller makes. A Closure is called for each request and may throw.
+     */
+    public function always(ChatResponse|Closure $reply): static
+    {
+        $this->always = $reply;
+
+        return $this;
+    }
+
+    /**
+     * @throws ProviderException When a scripted closure returns something other than a
+     *     ChatResponse.
+     */
+    private function resolve(ChatResponse|Closure $next, ChatRequest $request): ChatResponse
+    {
         if (!$next instanceof Closure) {
             return $next;
         }
@@ -163,6 +190,7 @@ class ScriptedProvider implements ChatProviderInterface
     {
         $this->queue = [];
         $this->requests = [];
+        $this->always = null;
 
         return $this;
     }
