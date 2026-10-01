@@ -1,0 +1,67 @@
+{
+    "name": "silverstripeltd/silverstripe-ai-core",
+    "type": "silverstripe-vendormodule",
+    "description": "Shared AI chat provider layer (Anthropic, OpenAI, Gemini) for Silverstripe CMS modules",
+    "license": "BSD-3-Clause",
+    "keywords": [
+        "silverstripe",
+        "silverstripe-module",
+        "ai",
+        "llm",
+        "anthropic",
+        "openai",
+        "gemini"
+    ],
+    "require": {
+        "php": "^8.3",
+        "silverstripe/framework": "^6.2",
+        "guzzlehttp/guzzle": "^7"
+    },
+    "require-dev": {
+        "squizlabs/php_codesniffer": "^3",
+        "slevomat/coding-standard": "^8.1",
+        "php-parallel-lint/php-parallel-lint": "^1.2",
+        "phpcompatibility/php-compatibility": "^9.3",
+        "phpunit/phpunit": "^11.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "SilverstripeLtd\\AiCore\\": "src/",
+            "SilverstripeLtd\\AiCore\\Tests\\Conformance\\": "tests/php/Conformance/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "SilverstripeLtd\\AiCore\\Tests\\": "tests/php/"
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "scripts": {
+        "silverstripe-standards": [
+            "@php-lint",
+            "@phpcs"
+        ],
+        "test": [
+            "@test-phpunit"
+        ],
+        "test-phpunit": "phpunit -d memory_limit=512M -d flush=1",
+        "php-lint": "parallel-lint src tests",
+        "phpcs": "phpcs src tests --standard=phpcs.xml --extensions=php --encoding=utf-8",
+        "phpcbf": "phpcbf src tests --standard=phpcs.xml --extensions=php --encoding=utf-8",
+        "sniffer:php84": "phpcs -p ./src --standard=vendor/phpcompatibility/php-compatibility/PHPCompatibility --runtime-set testVersion 8.4"
+    },
+    "config": {
+        "allow-plugins": {
+            "composer/installers": true,
+            "silverstripe/vendor-plugin": true,
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        },
+        "process-timeout": 1200
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.1.x-dev"
+        }
+    }
+}

@@ -1,0 +1,46 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "Let me search for that."
+          },
+          {
+            "functionCall": {
+              "name": "records__search",
+              "args": {
+                "class": "Page",
+                "query": "news"
+              }
+            }
+          },
+          {
+            "functionCall": {
+              "name": "schema__describe",
+              "args": {
+                "class": "Page"
+              }
+            }
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 1840,
+    "candidatesTokenCount": 14,
+    "totalTokenCount": 1854,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 1840
+      }
+    ]
+  },
+  "modelVersion": "gemini-3.8-flash",
+  "responseId": "BwHQaM5cPRJp27IPo73OwQ7"
+}

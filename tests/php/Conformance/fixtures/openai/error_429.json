@@ -1,0 +1,8 @@
+{
+  "error": {
+    "message": "Rate limit reached for gpt-6.1-sol on tokens per min (TPM): Limit 30000, Used 29800, Requested 1200.",
+    "type": "tokens",
+    "param": null,
+    "code": "rate_limit_exceeded"
+  }
+}

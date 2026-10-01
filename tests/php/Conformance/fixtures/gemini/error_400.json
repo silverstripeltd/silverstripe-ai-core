@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": 400,
+    "message": "* GenerateContentRequest.contents[2].parts[0].function_response.name: Name cannot be empty.",
+    "status": "INVALID_ARGUMENT"
+  }
+}

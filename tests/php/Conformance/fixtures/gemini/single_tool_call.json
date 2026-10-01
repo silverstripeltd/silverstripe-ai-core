@@ -1,0 +1,41 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "Let me search for that."
+          },
+          {
+            "functionCall": {
+              "id": "fc_3k9ztq2m",
+              "name": "records__search",
+              "args": {
+                "class": "Page",
+                "query": "home",
+                "limit": 5
+              }
+            },
+            "thoughtSignature": "CiQBVKhc7mQ4p1Xb2Z8tX0kq3yA1nR5sT6uV7wX8yZ9aB0cD1eF2gH3iJ4kL5mN6oP7qR8sT9uV0wX1yZ2aB3cD4eE="
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 1840,
+    "candidatesTokenCount": 14,
+    "totalTokenCount": 1854,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 1840
+      }
+    ]
+  },
+  "modelVersion": "gemini-3.8-flash",
+  "responseId": "9uHQaK3aNPHn07IPm53MwQ5"
+}

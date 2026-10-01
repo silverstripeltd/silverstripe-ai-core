@@ -1,0 +1,33 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "Weighing which records to read first.",
+            "thought": true
+          },
+          {
+            "text": "Hello! How can I help with your content today?"
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 1840,
+    "candidatesTokenCount": 14,
+    "totalTokenCount": 1854,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 1840
+      }
+    ]
+  },
+  "modelVersion": "gemini-3.8-flash",
+  "responseId": "H2HQaS1iVXPv87IPu34UwQ3"
+}

@@ -1,0 +1,37 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "Hello! How can I help with your content today?"
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 1000,
+    "candidatesTokenCount": 12,
+    "totalTokenCount": 1020,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 1000
+      }
+    ],
+    "thoughtsTokenCount": 8,
+    "cachedContentTokenCount": 900,
+    "cacheTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 900
+      }
+    ]
+  },
+  "modelVersion": "gemini-3.8-flash",
+  "responseId": "EzHQaP8fSUMs57IPr04RwQ0"
+}

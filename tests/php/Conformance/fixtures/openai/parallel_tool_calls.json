@@ -1,0 +1,55 @@
+{
+  "id": "chatcmpl-CE7xTp9w1Hs",
+  "object": "chat.completion",
+  "created": 1790812800,
+  "model": "gpt-6.1-sol",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Let me search for that.",
+        "refusal": null,
+        "annotations": [],
+        "tool_calls": [
+          {
+            "id": "call_Q1w2E3r4T5y6U7i8O9p0Aa1S",
+            "type": "function",
+            "function": {
+              "name": "records__search",
+              "arguments": "{\"class\":\"Page\",\"query\":\"news\"}"
+            }
+          },
+          {
+            "id": "call_Z9x8C7v6B5n4M3l2K1j0Hh9G",
+            "type": "function",
+            "function": {
+              "name": "schema__describe",
+              "arguments": "{\"class\":\"Page\"}"
+            }
+          }
+        ]
+      },
+      "logprobs": null,
+      "finish_reason": "tool_calls"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1520,
+    "completion_tokens": 14,
+    "total_tokens": 1534,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "cache_write_tokens": 0,
+      "audio_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    }
+  },
+  "service_tier": "default",
+  "system_fingerprint": null
+}

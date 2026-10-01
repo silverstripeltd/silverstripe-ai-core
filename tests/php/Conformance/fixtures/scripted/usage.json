@@ -1,0 +1,19 @@
+{
+  "message": {
+    "role": "assistant",
+    "blocks": [
+      {
+        "type": "text",
+        "text": "Hello! How can I help with your content today?"
+      }
+    ]
+  },
+  "stop_reason": "end_turn",
+  "usage": {
+    "input_tokens": 100,
+    "output_tokens": 20,
+    "cache_read_tokens": 900,
+    "cache_write_tokens": 50
+  },
+  "provider_message_id": "msg_scripted_fixture"
+}

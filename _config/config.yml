@@ -1,0 +1,27 @@
+---
+Name: ai-core
+---
+# The site wide provider settings read the shared AI_* environment variables. Modules pass
+# their own ProviderSettingsInterface (usually EnvProviderSettings with a module prefix) to
+# ProviderFactory::forSettings(), SimpleCompletion or JsonCompletion instead.
+SilverStripe\Core\Injector\Injector:
+  SilverstripeLtd\AiCore\Settings\ProviderSettingsInterface:
+    class: SilverstripeLtd\AiCore\Settings\EnvProviderSettings
+    constructor:
+      - ''
+  SilverstripeLtd\AiCore\Provider\ChatProviderInterface:
+    factory: SilverstripeLtd\AiCore\Provider\ProviderFactory
+  # The "scripted" provider greets and echoes once its queue is empty, so a UI can be tried
+  # without any API key.
+  SilverstripeLtd\AiCore\Testing\ScriptedProvider:
+    constructor:
+      - []
+      - true
+
+# Provider name to Injector service. Projects add their own providers here.
+SilverstripeLtd\AiCore\Provider\ProviderFactory:
+  providers:
+    anthropic: SilverstripeLtd\AiCore\Provider\Anthropic\AnthropicProvider
+    openai: SilverstripeLtd\AiCore\Provider\OpenAI\OpenAIProvider
+    gemini: SilverstripeLtd\AiCore\Provider\Gemini\GeminiProvider
+    scripted: SilverstripeLtd\AiCore\Testing\ScriptedProvider

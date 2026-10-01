@@ -1,0 +1,23 @@
+# Dependencies
+/vendor/
+
+# Local environment (never commit credentials)
+.env
+.env.*
+
+# Editor / OS
+.DS_Store
+.idea/
+
+# Test / coverage
+.phpunit.result.cache
+coverage/
+
+# Composer
+composer.lock
+
+# Local-dev runtime artefacts
+public/
+app/
+silverstripe-cache/
+silverstripe.log
