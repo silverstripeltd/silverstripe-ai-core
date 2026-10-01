@@ -12,11 +12,14 @@ SilverStripe\Core\Injector\Injector:
   SilverstripeLtd\AiCore\Provider\ChatProviderInterface:
     factory: SilverstripeLtd\AiCore\Provider\ProviderFactory
   # The "scripted" provider greets and echoes once its queue is empty, so a UI can be tried
-  # without any API key.
+  # without any API key. The arguments are keyed so a module can replace the greeting and the
+  # note in its own YAML without repeating the others; keep them in constructor order.
   SilverstripeLtd\AiCore\Testing\ScriptedProvider:
     constructor:
-      - []
-      - true
+      responses: []
+      fallbackToCanned: true
+      greeting: 'Hello, I am a scripted assistant.'
+      noProviderNote: 'No AI provider is configured, so I can only echo what you say. Set AI_API_KEY to talk to a real model.'
 
 # Provider name to Injector service. Projects add their own providers here.
 SilverstripeLtd\AiCore\Provider\ProviderFactory:
