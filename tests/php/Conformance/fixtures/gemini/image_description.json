@@ -1,0 +1,34 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "A red square centred on a white background.",
+            "thoughtSignature": "CiQBVKhc7mQ4p1Xb2Z8tX0kq3yA1nR5sT6uV7wX8yZ9aB0cD1eF2gH3iJ4kL5mN6oP7qR8sT9uV0wX1yZ2aB3cD4eE="
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 1098,
+    "candidatesTokenCount": 11,
+    "totalTokenCount": 1109,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 840
+      },
+      {
+        "modality": "IMAGE",
+        "tokenCount": 258
+      }
+    ]
+  },
+  "modelVersion": "gemini-3.8-flash",
+  "responseId": "Img7aJ2_MPGmz7IPkZ3LwQ9"
+}

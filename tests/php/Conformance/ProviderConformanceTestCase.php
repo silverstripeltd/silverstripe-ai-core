@@ -22,6 +22,7 @@ use SilverstripeLtd\AiCore\Provider\Message\ChatMessage;
 use SilverstripeLtd\AiCore\Provider\Message\ChatOptions;
 use SilverstripeLtd\AiCore\Provider\Message\ChatRequest;
 use SilverstripeLtd\AiCore\Provider\Message\ChatResponse;
+use SilverstripeLtd\AiCore\Provider\Message\ImageBlock;
 use SilverstripeLtd\AiCore\Provider\Message\Role;
 use SilverstripeLtd\AiCore\Provider\Message\StopReason;
 use SilverstripeLtd\AiCore\Provider\Message\TextBlock;
@@ -65,6 +66,15 @@ abstract class ProviderConformanceTestCase extends SapphireTest
     protected const string PREFIX_RULES = 'Static rules: never invent record ids.';
     protected const string PREFIX_TOOLS = 'Tool guide: search before you read.';
     protected const string SYSTEM_TEXT = 'Current page: Home (SiteTree #1).';
+    protected const string IMAGE_PROMPT = 'Describe this image for alternative text.';
+    protected const string IMAGE_DESCRIPTION = 'A red square centred on a white background.';
+
+    /**
+     * A 1x1 red PNG and a 1x1 white GIF, as base64.
+     */
+    protected const string IMAGE_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==';
+    protected const string IMAGE_GIF = 'R0lGODlhAQABAIAAAP///wAAACwAAAAAAQABAAACAkQBADs=';
+
     protected const string MODEL = 'conformance-model';
     protected const int MAX_TOKENS = 256;
     protected const int LARGE_RESULT_CHARS = 200000;
@@ -148,6 +158,19 @@ abstract class ProviderConformanceTestCase extends SapphireTest
      * @return array<int, array{ref: string, content: string, is_error: bool|null}>
      */
     abstract protected function wireToolResults(array $payload): array;
+
+    /**
+     * Images the request carries, in order, as media type and base64 data. Providers that
+     * take image input override this; the default skips the image scenarios so a provider
+     * shipped elsewhere keeps passing until it declares support.
+     *
+     * @param array<string, mixed> $payload
+     * @return array<int, array{media_type: string, data: string}>
+     */
+    protected function wireImages(array $payload): array
+    {
+        $this->markTestSkipped('This provider does not declare image input support.');
+    }
 
     /**
      * The value the vendor uses to pair a result with its call (an id, or a name).
@@ -298,6 +321,68 @@ abstract class ProviderConformanceTestCase extends SapphireTest
         }
 
         $this->assertContains(self::TOOL_TEXT, $this->conversationTexts($payload));
+    }
+
+    /**
+     * A user message holding a prompt and an image reaches the model with both, the image as
+     * the vendor's base64 form, and the reply parses as usual.
+     */
+    public function testImageInputIsSentWithItsPrompt(): void
+    {
+        $request = self::request([
+            new ChatMessage(Role::User, [
+                new TextBlock(self::IMAGE_PROMPT),
+                new ImageBlock(ImageBlock::MEDIA_PNG, self::IMAGE_PNG),
+            ]),
+        ]);
+
+        $response = $this->chatWithFixtures($request, 'image_description');
+        $payload = $this->sentPayload();
+
+        $this->assertSame(self::IMAGE_DESCRIPTION, $response->getText());
+        $this->assertSame(StopReason::EndTurn, $response->stopReason);
+        $this->assertSame(
+            [['media_type' => ImageBlock::MEDIA_PNG, 'data' => self::IMAGE_PNG]],
+            $this->wireImages($payload),
+        );
+        $this->assertSame([self::IMAGE_PROMPT], $this->conversationTexts($payload));
+    }
+
+    /**
+     * Several images keep their order and type; an image in an assistant message, which no
+     * vendor accepts, is left out rather than failing the request.
+     */
+    public function testImagesKeepTheirOrderAndAssistantImagesAreDropped(): void
+    {
+        $request = self::request([
+            new ChatMessage(Role::User, [
+                new TextBlock('Compare these two images.'),
+                new ImageBlock(ImageBlock::MEDIA_PNG, self::IMAGE_PNG),
+                new ImageBlock(ImageBlock::MEDIA_GIF, self::IMAGE_GIF),
+            ]),
+            new ChatMessage(Role::Assistant, [
+                new TextBlock('The first is red.'),
+                new ImageBlock(ImageBlock::MEDIA_GIF, self::IMAGE_GIF),
+            ]),
+            ChatMessage::fromText(Role::User, 'And the second?'),
+        ]);
+
+        $this->chatWithFixtures($request, 'image_description');
+        $payload = $this->sentPayload();
+        $expected = [
+            ['media_type' => ImageBlock::MEDIA_PNG, 'data' => self::IMAGE_PNG],
+            ['media_type' => ImageBlock::MEDIA_GIF, 'data' => self::IMAGE_GIF],
+        ];
+
+        if (!$this->usesHttp()) {
+            $expected[] = ['media_type' => ImageBlock::MEDIA_GIF, 'data' => self::IMAGE_GIF];
+        }
+
+        $this->assertSame($expected, $this->wireImages($payload));
+        $this->assertSame(
+            ['Compare these two images.', 'The first is red.', 'And the second?'],
+            $this->conversationTexts($payload),
+        );
     }
 
     public function testMaxTokensStop(): void

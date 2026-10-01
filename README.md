@@ -137,8 +137,27 @@ $response = $provider->chat(new ChatRequest(
 ));
 ```
 
-The DTOs under `Provider\Message` (messages, text, tool use and tool result blocks, tool
-schemas, usage, stop reasons) are the same for every vendor. Vendor details, the parity table
+The DTOs under `Provider\Message` (messages, text, image, tool use and tool result blocks,
+tool schemas, usage, stop reasons) are the same for every vendor.
+
+### Image input
+
+A user message can carry images next to its text, for vision tasks such as describing a
+photo for alternative text:
+
+```php
+use SilverstripeLtd\AiCore\Provider\Message\ImageBlock;
+use SilverstripeLtd\AiCore\Provider\Message\TextBlock;
+
+$message = new ChatMessage(Role::User, [
+    new TextBlock('Describe this image in one sentence.'),
+    ImageBlock::fromBinary($bytes, ImageBlock::MEDIA_JPEG),
+]);
+```
+
+`ImageBlock` takes JPEG, PNG, GIF or WebP up to `ImageBlock::MAX_BYTES` (5 MB decoded), the
+limit every vendor accepts; anything else throws `InvalidArgumentException`, so shrink large
+images first. Images in assistant messages are not sent, since no vendor accepts them there. Vendor details, the parity table
 and the conformance guarantee are in [docs/en/providers.md](docs/en/providers.md).
 
 An Injector service can resolve straight to a provider for a module's settings:

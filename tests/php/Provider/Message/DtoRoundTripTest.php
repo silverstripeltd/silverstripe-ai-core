@@ -11,6 +11,7 @@ use SilverstripeLtd\AiCore\Provider\Message\ChatMessage;
 use SilverstripeLtd\AiCore\Provider\Message\ChatOptions;
 use SilverstripeLtd\AiCore\Provider\Message\ChatRequest;
 use SilverstripeLtd\AiCore\Provider\Message\ChatResponse;
+use SilverstripeLtd\AiCore\Provider\Message\ImageBlock;
 use SilverstripeLtd\AiCore\Provider\Message\Role;
 use SilverstripeLtd\AiCore\Provider\Message\StopReason;
 use SilverstripeLtd\AiCore\Provider\Message\TextBlock;
@@ -34,6 +35,7 @@ class DtoRoundTripTest extends SapphireTest
             new ToolUseBlock('fc_1', 'records.get', ['id' => 1], ['gemini.thought_signature' => 'c2ln']),
             new ToolResultBlock('toolu_1', '{"count":2}'),
             new ToolResultBlock('toolu_2', 'Not found', true),
+            new ImageBlock(ImageBlock::MEDIA_PNG, base64_encode('png-bytes')),
         ];
 
         foreach ($blocks as $block) {
@@ -51,6 +53,51 @@ class DtoRoundTripTest extends SapphireTest
         $this->assertSame('text', (new TextBlock('x'))->toArray()['type']);
         $this->assertSame('tool_use', (new ToolUseBlock('a', 'b', []))->toArray()['type']);
         $this->assertSame('tool_result', (new ToolResultBlock('a', 'b'))->toArray()['type']);
+    }
+
+    public function testImageBlockFromBinaryReportsSizeAndDataUri(): void
+    {
+        $block = ImageBlock::fromBinary('abcde', ImageBlock::MEDIA_JPEG);
+
+        $this->assertSame('image', $block->toArray()['type']);
+        $this->assertSame(5, $block->byteLength());
+        $this->assertSame('data:image/jpeg;base64,YWJjZGU=', $block->toDataUri());
+        $this->assertSame([$block], (new ChatMessage(Role::User, [new TextBlock('x'), $block]))->getImages());
+    }
+
+    public function testImageBlockAcceptsAnImageAtTheSizeLimit(): void
+    {
+        $block = ImageBlock::fromBinary(str_repeat('a', ImageBlock::MAX_BYTES), ImageBlock::MEDIA_PNG);
+
+        $this->assertSame(ImageBlock::MAX_BYTES, $block->byteLength());
+    }
+
+    public function testImageBlockRejectsAnImageOverTheSizeLimit(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('byte limit');
+
+        ImageBlock::fromBinary(str_repeat('a', ImageBlock::MAX_BYTES + 1), ImageBlock::MEDIA_PNG);
+    }
+
+    public function testImageBlockRejectsUnsupportedMediaTypes(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('image/svg+xml');
+
+        new ImageBlock('image/svg+xml', base64_encode('<svg/>'));
+    }
+
+    public function testImageBlockRejectsDataThatIsNotBase64(): void
+    {
+        foreach (['', 'data:image/png;base64,AAAA', 'not base64!', 'abc'] as $data) {
+            try {
+                new ImageBlock(ImageBlock::MEDIA_PNG, $data);
+                $this->fail('Accepted ' . $data);
+            } catch (InvalidArgumentException $exception) {
+                $this->assertStringContainsString('base64', $exception->getMessage());
+            }
+        }
     }
 
     public function testUnknownBlockTypeIsRejected(): void

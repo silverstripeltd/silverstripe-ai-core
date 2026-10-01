@@ -37,14 +37,52 @@ class OpenAIConformanceTest extends ProviderConformanceTestCase
         $texts = [];
 
         foreach ($payload['messages'] as $message) {
-            if (!in_array($message['role'], ['user', 'assistant'], true) || !is_string($message['content'])) {
+            if (!in_array($message['role'], ['user', 'assistant'], true)) {
                 continue;
             }
 
-            $texts[] = $message['content'];
+            if (is_string($message['content'])) {
+                $texts[] = $message['content'];
+
+                continue;
+            }
+
+            foreach ((array) $message['content'] as $part) {
+                if (($part['type'] ?? '') !== 'text') {
+                    continue;
+                }
+
+                $texts[] = $part['text'];
+            }
         }
 
         return $texts;
+    }
+
+    protected function wireImages(array $payload): array
+    {
+        $images = [];
+
+        foreach ($payload['messages'] as $message) {
+            if (!is_array($message['content'])) {
+                continue;
+            }
+
+            foreach ($message['content'] as $part) {
+                if ($part['type'] !== 'image_url') {
+                    continue;
+                }
+
+                $this->assertSame('user', $message['role']);
+                $this->assertSame(
+                    1,
+                    preg_match('#^data:([^;]+);base64,(.+)$#', $part['image_url']['url'], $match),
+                );
+                $images[] = ['media_type' => $match[1], 'data' => $match[2]];
+            }
+        }
+
+        return $images;
     }
 
     protected function wireTools(array $payload): array

@@ -123,6 +123,23 @@ class ScriptedConformanceTest extends ProviderConformanceTestCase
         );
     }
 
+    protected function wireImages(array $payload): array
+    {
+        $images = [];
+
+        foreach ($payload['messages'] as $message) {
+            foreach ($message['blocks'] as $block) {
+                if ($block['type'] !== 'image') {
+                    continue;
+                }
+
+                $images[] = ['media_type' => $block['media_type'], 'data' => $block['data']];
+            }
+        }
+
+        return $images;
+    }
+
     protected function correlationRef(ToolUseBlock $use): string
     {
         return $use->id;

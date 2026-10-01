@@ -83,6 +83,25 @@ class AnthropicConformanceTest extends ProviderConformanceTestCase
         return $results;
     }
 
+    protected function wireImages(array $payload): array
+    {
+        $images = [];
+
+        foreach ($payload['messages'] as $message) {
+            foreach ($message['content'] as $block) {
+                if ($block['type'] !== 'image') {
+                    continue;
+                }
+
+                $this->assertSame('user', $message['role']);
+                $this->assertSame('base64', $block['source']['type']);
+                $images[] = ['media_type' => $block['source']['media_type'], 'data' => $block['source']['data']];
+            }
+        }
+
+        return $images;
+    }
+
     protected function correlationRef(ToolUseBlock $use): string
     {
         return $use->id;

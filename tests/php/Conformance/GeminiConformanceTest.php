@@ -94,6 +94,14 @@ class GeminiConformanceTest extends ProviderConformanceTestCase
         );
     }
 
+    protected function wireImages(array $payload): array
+    {
+        return array_map(
+            static fn (array $inline): array => ['media_type' => $inline['mimeType'], 'data' => $inline['data']],
+            $this->parts($payload, 'user', 'inlineData'),
+        );
+    }
+
     /**
      * Gemini pairs by id when the model supplied one, otherwise by name and order.
      */

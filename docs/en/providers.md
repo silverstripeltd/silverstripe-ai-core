@@ -153,6 +153,9 @@ neutral result for each:
   prompt, in the vendor's system slot, never in a user turn, and System role transcript
   messages never sent;
 - the model and the max tokens value on the wire;
+- image input: a user message with a prompt and an image reaches the model with both, the
+  image in the vendor's base64 form, several images keep their order and media types, and an
+  image in an assistant message is left out;
 - error mapping: 401 and 403 blocking, 429, 500 and 503 transient, network failure transient,
   400 and malformed bodies permanent, a missing key blocking with no request sent;
 - the API key never in any exception message, in dev or live mode, including error bodies
@@ -197,6 +200,7 @@ large results, schema delivery (within each dialect) and system prompt placement
 | Stop reasons | `end_turn`, `tool_use`, `max_tokens`; `refusal`, `pause_turn`, `stop_sequence` become Other | `stop`, `tool_calls`, `length`; `content_filter` and refusals become Other | `STOP` (ToolUse when calls are present), `MAX_TOKENS`; `SAFETY`, `RECITATION`, `MALFORMED_FUNCTION_CALL` and the rest become Other |
 | Errors beyond the shared mapping | 529 overloaded is transient | 429 `insufficient_quota` is blocking | 400 `API_KEY_INVALID` and `FAILED_PRECONDITION` are blocking |
 | Reasoning control | `output_config.effort` | `reasoning_effort` | `thinkingConfig.thinkingLevel` |
+| Image input (`ImageBlock`) | `image` block with a `base64` source in a user message | `image_url` content part holding a data URI; the user message becomes a parts array | `inlineData` part with `mimeType` and `data` |
 
 What this means in practice: a conversation can move between providers (ids are opaque
 strings valid everywhere, and Gemini accepts foreign calls through the skip signature), cost

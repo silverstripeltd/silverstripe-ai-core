@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- `ImageBlock`: image input (JPEG, PNG, GIF, WebP up to 5 MB) in user messages, mapped to
+  Anthropic image blocks, OpenAI `image_url` parts and Gemini `inlineData` parts, with
+  conformance scenarios for every provider. `ProviderConformanceTestCase::wireImages()` is
+  optional for providers shipped elsewhere; the image scenarios skip until it is overridden.
+
 ## 0.1.0
 
 First release, extracted from Content Engineer's provider layer.

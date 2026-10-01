@@ -23,6 +23,7 @@ final class BlockFactory
             TextBlock::TYPE => TextBlock::fromArray($data),
             ToolUseBlock::TYPE => ToolUseBlock::fromArray($data),
             ToolResultBlock::TYPE => ToolResultBlock::fromArray($data),
+            ImageBlock::TYPE => ImageBlock::fromArray($data),
             default => throw new InvalidArgumentException(sprintf('Unknown content block type "%s"', $type)),
         };
     }

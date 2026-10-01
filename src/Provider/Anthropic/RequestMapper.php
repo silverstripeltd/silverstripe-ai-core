@@ -8,6 +8,7 @@ use SilverstripeLtd\AiCore\Provider\Message\BlockInterface;
 use SilverstripeLtd\AiCore\Provider\Message\ChatMessage;
 use SilverstripeLtd\AiCore\Provider\Message\ChatOptions;
 use SilverstripeLtd\AiCore\Provider\Message\ChatRequest;
+use SilverstripeLtd\AiCore\Provider\Message\ImageBlock;
 use SilverstripeLtd\AiCore\Provider\Message\Role;
 use SilverstripeLtd\AiCore\Provider\Message\TextBlock;
 use SilverstripeLtd\AiCore\Provider\Message\ToolResultBlock;
@@ -25,6 +26,8 @@ use stdClass;
  * tool_result blocks), Assistant as "assistant". System messages never appear in "messages";
  * the system prompt travels in the top-level "system" array instead, with the stable prefix
  * marked for prompt caching. A configured reasoning effort is sent as output_config.effort.
+ * Images travel as base64 image blocks in user messages; the API refuses them from the
+ * assistant, so an image in an assistant message is dropped.
  */
 final class RequestMapper
 {
@@ -32,6 +35,7 @@ final class RequestMapper
     private const string ROLE_ASSISTANT = 'assistant';
     private const array CACHE_CONTROL = ['type' => 'ephemeral'];
     private const array TOOL_CHOICE_AUTO = ['type' => 'auto'];
+    private const string SOURCE_BASE64 = 'base64';
 
     private readonly SchemaDialectInterface $dialect;
 
@@ -133,7 +137,7 @@ final class RequestMapper
                 continue;
             }
 
-            $content = $this->mapBlocks($message->blocks);
+            $content = $this->mapBlocks($message->blocks, $message->role !== Role::Assistant);
 
             if ($content === []) {
                 continue;
@@ -156,11 +160,15 @@ final class RequestMapper
      * @param array<int, BlockInterface> $blocks
      * @return array<int, array<string, mixed>>
      */
-    private function mapBlocks(array $blocks): array
+    private function mapBlocks(array $blocks, bool $acceptsImages): array
     {
         $content = [];
 
         foreach ($blocks as $block) {
+            if ($block instanceof ImageBlock && !$acceptsImages) {
+                continue;
+            }
+
             $mapped = $this->mapBlock($block);
 
             if ($mapped === null) {
@@ -182,6 +190,17 @@ final class RequestMapper
             return $block->text === ''
                 ? null
                 : ['type' => TextBlock::TYPE, 'text' => $block->text];
+        }
+
+        if ($block instanceof ImageBlock) {
+            return [
+                'type' => ImageBlock::TYPE,
+                'source' => [
+                    'type' => self::SOURCE_BASE64,
+                    'media_type' => $block->mediaType,
+                    'data' => $block->data,
+                ],
+            ];
         }
 
         if ($block instanceof ToolUseBlock) {

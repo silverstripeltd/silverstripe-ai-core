@@ -91,6 +91,17 @@ final readonly class ChatMessage
     }
 
     /**
+     * @return array<int, ImageBlock>
+     */
+    public function getImages(): array
+    {
+        return array_values(array_filter(
+            $this->blocks,
+            static fn (BlockInterface $block): bool => $block instanceof ImageBlock,
+        ));
+    }
+
+    /**
      * @return array<int, ToolResultBlock>
      */
     public function getToolResults(): array

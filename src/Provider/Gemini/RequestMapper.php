@@ -7,6 +7,7 @@ namespace SilverstripeLtd\AiCore\Provider\Gemini;
 use SilverstripeLtd\AiCore\Provider\Message\ChatMessage;
 use SilverstripeLtd\AiCore\Provider\Message\ChatOptions;
 use SilverstripeLtd\AiCore\Provider\Message\ChatRequest;
+use SilverstripeLtd\AiCore\Provider\Message\ImageBlock;
 use SilverstripeLtd\AiCore\Provider\Message\Role;
 use SilverstripeLtd\AiCore\Provider\Message\TextBlock;
 use SilverstripeLtd\AiCore\Provider\Message\ToolResultBlock;
@@ -28,7 +29,8 @@ use stdClass;
  * carrying the call's name and Gemini id, found by looking the ToolResultBlock's id up among
  * the earlier calls. The result string is sent as {"output": ...}, or {"error": ...} for a
  * failed call, because Gemini expects an object. A result whose call is not in the transcript
- * is sent as text, since a functionResponse needs the function name.
+ * is sent as text, since a functionResponse needs the function name. Images in user
+ * messages become inlineData parts in block order; images from the model are dropped.
  */
 final class RequestMapper
 {
@@ -259,6 +261,8 @@ final class RequestMapper
         foreach ($message->blocks as $block) {
             if ($block instanceof TextBlock && $block->text !== '') {
                 $parts[] = ['text' => $block->text];
+            } elseif ($block instanceof ImageBlock) {
+                $parts[] = ['inlineData' => ['mimeType' => $block->mediaType, 'data' => $block->data]];
             } elseif ($block instanceof ToolResultBlock) {
                 $parts[] = $this->mapResult($block, $calls[$block->toolUseId] ?? null);
             }

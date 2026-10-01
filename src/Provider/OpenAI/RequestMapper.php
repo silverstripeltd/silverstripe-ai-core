@@ -7,7 +7,9 @@ namespace SilverstripeLtd\AiCore\Provider\OpenAI;
 use SilverstripeLtd\AiCore\Provider\Message\ChatMessage;
 use SilverstripeLtd\AiCore\Provider\Message\ChatOptions;
 use SilverstripeLtd\AiCore\Provider\Message\ChatRequest;
+use SilverstripeLtd\AiCore\Provider\Message\ImageBlock;
 use SilverstripeLtd\AiCore\Provider\Message\Role;
+use SilverstripeLtd\AiCore\Provider\Message\TextBlock;
 use SilverstripeLtd\AiCore\Provider\Message\ToolSchema;
 use SilverstripeLtd\AiCore\Provider\Message\ToolUseBlock;
 use SilverstripeLtd\AiCore\Provider\Schema\OpenAISchemaDialect;
@@ -25,6 +27,9 @@ use stdClass;
  * ids preserved, and every ToolResultBlock becomes its own "tool" message carrying the call
  * id, in order. Error results are not flagged separately because their content already says
  * so. Output is capped with max_completion_tokens, which also covers reasoning tokens.
+ * A user message with images is sent as content parts (text, then image_url parts holding
+ * data URIs) in block order; only user messages may carry images, so assistant images are
+ * dropped.
  */
 final class RequestMapper
 {
@@ -34,6 +39,8 @@ final class RequestMapper
     public const string ROLE_TOOL = 'tool';
     public const string TOOL_TYPE_FUNCTION = 'function';
     public const string TOOL_CHOICE_AUTO = 'auto';
+    public const string PART_TEXT = 'text';
+    public const string PART_IMAGE_URL = 'image_url';
     public const string CACHE_KEY_PREFIX = 'content-engineer-';
 
     private const int CACHE_KEY_HASH_LENGTH = 32;
@@ -168,6 +175,12 @@ final class RequestMapper
             ];
         }
 
+        if ($message->getImages() !== []) {
+            $mapped[] = ['role' => self::ROLE_USER, 'content' => $this->contentParts($message)];
+
+            return $mapped;
+        }
+
         $text = $message->getText();
 
         if ($text !== '') {
@@ -175,6 +188,26 @@ final class RequestMapper
         }
 
         return $mapped;
+    }
+
+    /**
+     * Text and image blocks as Chat Completions content parts, in their original order.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function contentParts(ChatMessage $message): array
+    {
+        $parts = [];
+
+        foreach ($message->blocks as $block) {
+            if ($block instanceof TextBlock && $block->text !== '') {
+                $parts[] = ['type' => self::PART_TEXT, 'text' => $block->text];
+            } elseif ($block instanceof ImageBlock) {
+                $parts[] = ['type' => self::PART_IMAGE_URL, 'image_url' => ['url' => $block->toDataUri()]];
+            }
+        }
+
+        return $parts;
     }
 
     /**
