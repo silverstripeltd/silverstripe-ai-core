@@ -63,9 +63,14 @@ For each setting the first non blank value wins:
    `EnvProviderSettings.shared.<key>`
 5. the provider's built-in default
 
-One safety rule: when a module names its own provider (`AI_SEO_PROVIDER`) and it differs from
-`AI_PROVIDER`, the shared `AI_API_KEY` and `AI_MODEL` are not used for that module, so a key
-for one vendor is never sent to another. Set `AI_PROVIDER` whenever you set `AI_API_KEY`.
+Two exceptions for the API key and model:
+
+- The shared `AI_API_KEY` and `AI_MODEL` belong to the shared provider, which is `AI_PROVIDER`,
+  or `anthropic` when that is unset. They are used only for a module whose resolved provider
+  (from any step above) is that same provider, so a key for one vendor is never sent to another.
+  Set `AI_PROVIDER` whenever you set `AI_API_KEY` for a vendor other than Anthropic.
+- A key or model in the module's own YAML entry (step 3) wins over the shared variable
+  (step 2), since it was set for that module specifically.
 
 Invalid values (a non numeric timeout, a negative max tokens) raise a blocking
 `SettingsException` naming the variable, never echoing its value.

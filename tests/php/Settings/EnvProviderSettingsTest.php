@@ -258,4 +258,73 @@ class EnvProviderSettingsTest extends SapphireTest
 
         $this->assertSame('shared-model', $settings->getEnvValue(EnvProviderSettings::MODEL));
     }
+
+    public function testSharedKeyBelongsToTheDefaultProviderWhenTheSharedProviderIsUnset(): void
+    {
+        Environment::setEnv('AI_API_KEY', 'anthropic-key');
+        Environment::setEnv('AI_MODEL', 'claude-model');
+        Environment::setEnv('AI_TEST_PROVIDER', 'openai');
+
+        $settings = EnvProviderSettings::forModule('test');
+
+        $this->assertSame('openai', $settings->getProviderName());
+        $this->assertSame('anthropic', $settings->getSharedProviderName());
+        $this->assertFalse($settings->hasApiKey());
+        $this->assertNull($settings->getModel());
+        $this->assertNull($settings->getEnvValue(EnvProviderSettings::API_KEY));
+    }
+
+    public function testSharedKeyIsSkippedWhenModuleYamlPicksAnotherProvider(): void
+    {
+        Environment::setEnv('AI_API_KEY', 'anthropic-key');
+        Config::modify()->merge(EnvProviderSettings::class, 'modules', ['TEST' => ['provider' => 'gemini']]);
+
+        $settings = EnvProviderSettings::forModule('test');
+
+        $this->assertSame('gemini', $settings->getProviderName());
+        $this->assertFalse($settings->hasApiKey());
+    }
+
+    public function testSharedKeyIsUsedForTheDefaultProviderWhenNothingNamesOne(): void
+    {
+        Environment::setEnv('AI_API_KEY', 'anthropic-key');
+
+        $settings = EnvProviderSettings::forModule('test');
+
+        $this->assertSame('anthropic', $settings->getProviderName());
+        $this->assertSame('anthropic-key', $settings->getApiKey());
+    }
+
+    public function testModuleYamlKeyWinsOverTheSharedVariable(): void
+    {
+        Environment::setEnv('AI_PROVIDER', 'gemini');
+        Environment::setEnv('AI_API_KEY', 'shared-key');
+        Environment::setEnv('AI_MODEL', 'shared-model');
+        Config::modify()->merge(EnvProviderSettings::class, 'modules', [
+            'TEST' => ['api_key' => 'module-yaml-key', 'providers' => ['gemini' => ['model' => 'module-model']]],
+        ]);
+
+        $settings = EnvProviderSettings::forModule('test');
+
+        $this->assertSame('module-yaml-key', $settings->getApiKey());
+        $this->assertSame('module-model', $settings->getModel());
+        $this->assertSame('shared-key', EnvProviderSettings::forModule('other')->getApiKey());
+
+        Environment::setEnv('AI_TEST_API_KEY', 'module-env-key');
+
+        $this->assertSame('module-env-key', $settings->getApiKey());
+    }
+
+    public function testEnvValueUsesTheProviderTheCallerResolved(): void
+    {
+        Environment::setEnv('AI_API_KEY', 'anthropic-key');
+        Environment::setEnv('AI_REQUEST_TIMEOUT', '30');
+
+        $settings = EnvProviderSettings::forModule('test');
+
+        $this->assertNull($settings->getEnvValue(EnvProviderSettings::API_KEY, 'openai'));
+        $this->assertSame('anthropic-key', $settings->getEnvValue(EnvProviderSettings::API_KEY, 'Anthropic'));
+        $this->assertSame('30', $settings->getEnvValue(EnvProviderSettings::REQUEST_TIMEOUT, 'openai'));
+        $this->assertNull($settings->getModuleEnvValue(EnvProviderSettings::API_KEY));
+    }
 }

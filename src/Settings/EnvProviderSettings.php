@@ -19,9 +19,11 @@ use SilverstripeLtd\AiCore\Provider\ProviderFactory;
  * 3. YAML: modules.<PREFIX>.providers.<provider>.<key>, then modules.<PREFIX>.<key>
  * 4. YAML: shared.providers.<provider>.<key>, then shared.<key>
  *
- * The shared AI_API_KEY and AI_MODEL are skipped when the module names its own provider in
- * AI_<PREFIX>_PROVIDER and that differs from AI_PROVIDER, so a key meant for one vendor is
- * never sent to another. An empty prefix reads the shared variables only.
+ * The shared AI_API_KEY and AI_MODEL belong to the shared provider: AI_PROVIDER, or the default
+ * provider when that is unset. They are used only when the module's resolved provider is that
+ * same provider, so a key meant for one vendor is never sent to another. For these two names a
+ * value in the module's own YAML entry also wins over the shared variable, since it was set for
+ * this module specifically. An empty prefix reads the shared variables only.
  *
  * Names: PROVIDER, API_KEY, MODEL, MAX_TOKENS, REQUEST_TIMEOUT, TEMPERATURE and
  * THINKING_LEVEL. YAML keys are the lower case equivalents.
@@ -189,26 +191,67 @@ class EnvProviderSettings implements ProviderSettingsInterface
     /**
      * The environment part of the chain on its own: the module's variable, then the shared
      * one. Lets a module that keeps its own YAML settings reuse the same variable rules.
+     *
+     * @param string|null $provider The module's resolved provider name, used to decide whether
+     *     the shared API key and model apply. Null resolves it through this class's own chain,
+     *     which a module that keeps its provider in its own YAML must not rely on.
      */
-    public function getEnvValue(string $name): ?string
+    public function getEnvValue(string $name, ?string $provider = null): ?string
     {
-        $value = $this->moduleEnv($name);
-
-        if ($value !== null) {
-            return $value;
-        }
-
-        return !in_array($name, self::CREDENTIAL_NAMES, true) || $this->sharesProvider()
-            ? $this->sharedEnv($name)
-            : null;
+        return $this->getModuleEnvValue($name) ?? $this->getSharedEnvValue($name, $provider);
     }
 
     /**
-     * Resolves one setting through the environment and YAML chain.
+     * The module's own variable, AI_<PREFIX>_<NAME>, or null when unset or blank.
+     */
+    public function getModuleEnvValue(string $name): ?string
+    {
+        return $this->moduleEnv($name);
+    }
+
+    /**
+     * The shared variable, AI_<NAME>, or null when unset or blank. The shared API key and model
+     * are also null unless the module's provider is the shared provider.
+     *
+     * @param string|null $provider The module's resolved provider name; null resolves it through
+     *     this class's own chain.
+     */
+    public function getSharedEnvValue(string $name, ?string $provider = null): ?string
+    {
+        if (in_array($name, self::CREDENTIAL_NAMES, true)
+            && !$this->sharesProvider($provider ?? $this->getProviderName())
+        ) {
+            return null;
+        }
+
+        return $this->sharedEnv($name);
+    }
+
+    /**
+     * The provider the shared AI_API_KEY and AI_MODEL belong to: AI_PROVIDER, or the default
+     * provider when that is unset.
+     */
+    public function getSharedProviderName(): string
+    {
+        return strtolower($this->sharedEnv(self::PROVIDER) ?? self::DEFAULT_PROVIDER);
+    }
+
+    /**
+     * Resolves one setting through the environment and YAML chain. The API key and model
+     * prefer the module's YAML over the shared variable.
      */
     protected function lookup(string $name): ?string
     {
-        return $this->getEnvValue($name) ?? $this->yamlLookup($name);
+        if (!in_array($name, self::CREDENTIAL_NAMES, true)) {
+            return $this->getEnvValue($name) ?? $this->yamlLookup($name);
+        }
+
+        $provider = $this->getProviderName();
+
+        return $this->moduleEnv($name)
+            ?? $this->yamlFrom($this->moduleYaml(), $name, $provider)
+            ?? $this->getSharedEnvValue($name, $provider)
+            ?? $this->yamlFrom($this->sharedYaml(), $name, $provider);
     }
 
     /**
@@ -219,19 +262,23 @@ class EnvProviderSettings implements ProviderSettingsInterface
     {
         $provider = $this->getProviderName();
 
-        foreach ([$this->moduleYaml(), $this->sharedYaml()] as $settings) {
-            $providers = $settings[self::YAML_PROVIDERS] ?? [];
-            $override = is_array($providers) && is_array($providers[$provider] ?? null)
-                ? $providers[$provider]
-                : [];
-            $value = $this->yamlValue($override, $name) ?? $this->yamlValue($settings, $name);
+        return $this->yamlFrom($this->moduleYaml(), $name, $provider)
+            ?? $this->yamlFrom($this->sharedYaml(), $name, $provider);
+    }
 
-            if ($value !== null) {
-                return $value;
-            }
-        }
+    /**
+     * One YAML entry's value, with the provider's override ahead of the general value.
+     *
+     * @param array<string, mixed> $settings
+     */
+    private function yamlFrom(array $settings, string $name, string $provider): ?string
+    {
+        $providers = $settings[self::YAML_PROVIDERS] ?? [];
+        $override = is_array($providers) && is_array($providers[$provider] ?? null)
+            ? $providers[$provider]
+            : [];
 
-        return null;
+        return $this->yamlValue($override, $name) ?? $this->yamlValue($settings, $name);
     }
 
     /**
@@ -255,14 +302,11 @@ class EnvProviderSettings implements ProviderSettingsInterface
     }
 
     /**
-     * True unless the module explicitly picks a provider other than the shared one.
+     * True when the module's provider is the one the shared credentials belong to.
      */
-    private function sharesProvider(): bool
+    private function sharesProvider(string $provider): bool
     {
-        $module = $this->moduleEnv(self::PROVIDER);
-        $shared = $this->sharedEnv(self::PROVIDER);
-
-        return $module === null || $shared === null || strtolower($module) === strtolower($shared);
+        return strtolower(trim($provider)) === $this->getSharedProviderName();
     }
 
     private function moduleEnv(string $name): ?string
