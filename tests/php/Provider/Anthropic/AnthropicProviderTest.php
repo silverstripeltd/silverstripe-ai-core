@@ -317,6 +317,19 @@ class AnthropicProviderTest extends SapphireTest
         }
     }
 
+    public function testRetryAfterHeaderIsCarriedOnTheException(): void
+    {
+        $seconds = self::errorResponse(429, 'slow down')->withHeader('retry-after', '15');
+        $date = self::errorResponse(529, 'overloaded')
+            ->withHeader('retry-after', gmdate('D, d M Y H:i:s \\G\\M\\T', time() + 120));
+        $none = self::errorResponse(429, 'slow down');
+
+        $this->assertSame(15, $this->chatExpectingFailure([$seconds])->getRetryAfterSeconds());
+        $this->assertEqualsWithDelta(120, $this->chatExpectingFailure([$date])->getRetryAfterSeconds(), 2);
+        $this->assertNull($this->chatExpectingFailure([$none])->getRetryAfterSeconds());
+        $this->assertFalse($this->chatExpectingFailure([$seconds])->isDailyQuotaExhausted());
+    }
+
     public function testBadRequestIsNeitherTransientNorBlocking(): void
     {
         $exception = $this->chatExpectingFailure([self::errorResponse(400, 'messages: roles must alternate')]);

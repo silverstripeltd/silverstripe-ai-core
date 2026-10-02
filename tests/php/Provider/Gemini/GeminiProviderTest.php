@@ -221,4 +221,37 @@ class GeminiProviderTest extends HttpProviderTestCase
             $this->assertSame(400, $exception->getCode());
         }
     }
+
+    public function testRateLimitCarriesTheRetryInfoDelayRoundedUp(): void
+    {
+        $exception = $this->chatExpectingFailure([$this->fixture('error_429', 429)]);
+
+        $this->assertTrue($exception->isTransient());
+        $this->assertSame(23, $exception->getRetryAfterSeconds());
+        $this->assertFalse($exception->isDailyQuotaExhausted());
+    }
+
+    public function testDailyQuotaIsToldApartFromAShortBusyPeriod(): void
+    {
+        $daily = $this->chatExpectingFailure([$this->fixture('error_429_daily', 429)]);
+
+        $this->assertTrue($daily->isTransient());
+        $this->assertTrue($daily->isDailyQuotaExhausted());
+        $this->assertSame(14, $daily->getRetryAfterSeconds());
+
+        $perMinute = $this->chatExpectingFailure([$this->fixture('error_429_per_minute', 429)]);
+
+        $this->assertFalse($perMinute->isDailyQuotaExhausted());
+        // No RetryInfo detail: the delay is read from the message.
+        $this->assertSame(46, $perMinute->getRetryAfterSeconds());
+    }
+
+    public function testAFailureWithoutAHintHasNoRetryDelay(): void
+    {
+        $exception = $this->chatExpectingFailure([$this->fixture('error_500', 500)]);
+
+        $this->assertTrue($exception->isTransient());
+        $this->assertNull($exception->getRetryAfterSeconds());
+        $this->assertFalse($exception->isDailyQuotaExhausted());
+    }
 }

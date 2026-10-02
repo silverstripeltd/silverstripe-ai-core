@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `ProviderException::getRetryAfterSeconds()` carries the provider's retry hint (Gemini
+  `RetryInfo`, `retry-after-ms` and `retry-after` headers) and `isDailyQuotaExhausted()`
+  tells a used up Gemini daily quota from a short busy period.
+
 - `ImageBlock`: image input (JPEG, PNG, GIF, WebP up to 5 MB) in user messages, mapped to
   Anthropic image blocks, OpenAI `image_url` parts and Gemini `inlineData` parts, with
   conformance scenarios for every provider. `ProviderConformanceTestCase::wireImages()` is

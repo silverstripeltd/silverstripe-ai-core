@@ -193,6 +193,11 @@ Every failure is a `Provider\ProviderException`:
   OpenAI `insufficient_quota`, Gemini `API_KEY_INVALID`, unknown provider, invalid settings).
 - `isTransient()`: the same call may succeed later (429, 5xx, network failures).
 - neither: the request or the reply is wrong (other 4xx, malformed replies).
+- `getRetryAfterSeconds()`: the provider's hint of how long to wait before trying again, in
+  whole seconds (Gemini's `RetryInfo` detail, else the `retry-after-ms` or `retry-after`
+  header), or null when it gave none.
+- `isDailyQuotaExhausted()`: a per day allowance ran out (a Gemini quota id containing
+  `PerDay`), so waiting a few seconds will not help.
 
 Nothing retries inside the package; callers decide. Messages never contain an API key, and the
 vendor's own error text is only appended in dev mode.

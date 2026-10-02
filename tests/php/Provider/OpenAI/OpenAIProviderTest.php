@@ -132,6 +132,16 @@ class OpenAIProviderTest extends HttpProviderTestCase
         $this->assertSame(429, $exception->getCode());
     }
 
+    public function testRetryAfterHeadersAreCarriedOnTheException(): void
+    {
+        $seconds = $this->fixture('error_429', 429)->withHeader('retry-after', '7');
+        $milliseconds = $this->fixture('error_429', 429)->withHeader('retry-after-ms', '1500');
+
+        $this->assertSame(7, $this->chatExpectingFailure([$seconds])->getRetryAfterSeconds());
+        $this->assertSame(2, $this->chatExpectingFailure([$milliseconds])->getRetryAfterSeconds());
+        $this->assertNull($this->chatExpectingFailure([$this->fixture('error_429', 429)])->getRetryAfterSeconds());
+    }
+
     public function testRefusalIsKeptAsTextWithStopReasonOther(): void
     {
         $response = $this->provider([$this->fixture('refusal')])->chat(self::request());

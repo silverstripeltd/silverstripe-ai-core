@@ -31,6 +31,9 @@ use SilverstripeLtd\AiCore\Settings\ProviderSettingsInterface;
  * Classification: missing key, 401 and 403 are blocking; 429, 5xx and network failures are
  * transient; everything else (other 4xx, unreadable bodies) is permanent. Subclasses refine
  * this for vendor specific bodies such as an exhausted quota or an invalid key sent as 400.
+ *
+ * A failed response's retry hint (the retry-after-ms or retry-after header, in seconds or
+ * as a date) is carried on the exception; subclasses may read it from the body instead.
  */
 abstract class HttpChatProvider implements SettingsAwareProviderInterface
 {
@@ -41,6 +44,9 @@ abstract class HttpChatProvider implements SettingsAwareProviderInterface
     protected const int STATUS_FORBIDDEN = 403;
     protected const int STATUS_RATE_LIMITED = 429;
     protected const int STATUS_SERVER_ERROR = 500;
+
+    protected const string HEADER_RETRY_AFTER = 'retry-after';
+    protected const string HEADER_RETRY_AFTER_MS = 'retry-after-ms';
 
     private const string REDACTED = '[redacted]';
     private const int JSON_FLAGS = JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
@@ -163,6 +169,58 @@ abstract class HttpChatProvider implements SettingsAwareProviderInterface
     }
 
     /**
+     * Whole seconds the provider asked to wait before trying again, null when it did not say.
+     *
+     * @param array<string, mixed> $error The decoded error body, empty when it was not JSON
+     */
+    protected function extractRetryAfterSeconds(ResponseInterface $response, array $error): ?int
+    {
+        $milliseconds = trim($response->getHeaderLine(self::HEADER_RETRY_AFTER_MS));
+
+        if (is_numeric($milliseconds)) {
+            return self::wholeSeconds((float) $milliseconds / 1000);
+        }
+
+        $value = trim($response->getHeaderLine(self::HEADER_RETRY_AFTER));
+
+        if ($value === '') {
+            return null;
+        }
+
+        if (is_numeric($value)) {
+            return self::wholeSeconds((float) $value);
+        }
+
+        $time = strtotime($value);
+
+        return $time === false
+            ? null
+            : self::wholeSeconds((float) ($time - time()));
+    }
+
+    /**
+     * True when the error says a per day allowance has run out. Vendors that say so override this.
+     *
+     * @param array<string, mixed> $error The decoded error body, empty when it was not JSON
+     */
+    protected function isDailyQuotaError(array $error): bool
+    {
+        return false;
+    }
+
+    /**
+     * A wait rounded up to whole seconds; never less than one second, null for a negative wait.
+     */
+    protected static function wholeSeconds(float $seconds): ?int
+    {
+        if ($seconds < 0) {
+            return null;
+        }
+
+        return max(1, (int) ceil($seconds));
+    }
+
+    /**
      * The human readable message in an error body. All three vendors use error.message.
      *
      * @param array<string, mixed> $error
@@ -221,7 +279,7 @@ abstract class HttpChatProvider implements SettingsAwareProviderInterface
         $body = (string) $response->getBody();
 
         if ($status < 200 || $status >= 300) {
-            throw $this->mapHttpError($status, $body, $apiKey);
+            throw $this->mapHttpError($response, $body, $apiKey);
         }
 
         try {
@@ -248,8 +306,9 @@ abstract class HttpChatProvider implements SettingsAwareProviderInterface
         return $decoded;
     }
 
-    private function mapHttpError(int $status, string $body, string $apiKey): ProviderException
+    private function mapHttpError(ResponseInterface $response, string $body, string $apiKey): ProviderException
     {
+        $status = $response->getStatusCode();
         $decoded = json_decode($body, true);
         $error = is_array($decoded)
             ? $decoded
@@ -262,7 +321,13 @@ abstract class HttpChatProvider implements SettingsAwareProviderInterface
         }
 
         if ($this->isTransientError($status, $error)) {
-            return ProviderException::transient($message, $status);
+            return ProviderException::transient(
+                $message,
+                $status,
+                null,
+                $this->extractRetryAfterSeconds($response, $error),
+                $this->isDailyQuotaError($error),
+            );
         }
 
         return new ProviderException($message, false, false, $status);

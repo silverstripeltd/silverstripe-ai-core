@@ -118,6 +118,10 @@ rebrand the greeting and the note through the constructor. In tests the same cla
   (plus the vendor specific cases above) are blocking: someone must fix the configuration
   before a retry can succeed. 429, 5xx (including Anthropic's 529) and network failures are
   transient: the caller may retry later. Other 4xx and unreadable bodies are permanent. The vendor's own error text is kept only in dev mode, with the key redacted.
+- A failed call's retry hint is kept on the exception as `getRetryAfterSeconds()`: Gemini's
+  `RetryInfo` detail (or the "Please retry in" of its message), else the `retry-after-ms` or
+  `retry-after` header that Anthropic and OpenAI send. `isDailyQuotaExhausted()` is true when
+  a Gemini `QuotaFailure` names a quota id containing `PerDay`.
 - Tool names use dots (`records.search`). Anthropic and OpenAI only accept letters, digits,
   `_` and `-`, and Gemini rejects dots in call and response names, so every vendor receives
   `records__search` and the name is mapped back (`Provider\ToolNameCodec`). Wire names must be
