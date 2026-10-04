@@ -19,16 +19,17 @@ use SilverstripeLtd\AiCore\Provider\ProviderFactory;
  * 3. YAML: modules.<PREFIX>.providers.<provider>.<key>, then modules.<PREFIX>.<key>
  * 4. YAML: shared.providers.<provider>.<key>, then shared.<key>
  *
- * The shared AI_API_KEY and AI_MODEL belong to the shared provider: AI_PROVIDER, or the default
- * provider when that is unset. They are used only when the module's resolved provider is that
- * same provider, so a key meant for one vendor is never sent to another. For these two names a
- * value in the module's own YAML entry also wins over the shared variable, since it was set for
- * this module specifically. An empty prefix reads the shared variables only.
+ * The shared AI_API_KEY, AI_MODEL and AI_WORKSPACE_ID belong to the shared provider:
+ * AI_PROVIDER, or the default provider when that is unset. They are used only when the
+ * module's resolved provider is that same provider, so a key or workspace meant for one vendor
+ * is never sent to another. For these names a value in the module's own YAML entry also wins
+ * over the shared variable, since it was set for this module specifically. An empty prefix
+ * reads the shared variables only.
  *
- * Names: PROVIDER, API_KEY, MODEL, MAX_TOKENS, REQUEST_TIMEOUT, TEMPERATURE and
- * THINKING_LEVEL. YAML keys are the lower case equivalents.
+ * Names: PROVIDER, API_KEY, MODEL, MAX_TOKENS, REQUEST_TIMEOUT, TEMPERATURE, THINKING_LEVEL
+ * and WORKSPACE_ID. YAML keys are the lower case equivalents.
  */
-class EnvProviderSettings implements ProviderSettingsInterface
+class EnvProviderSettings implements ProviderSettingsInterface, WorkspaceSettingsInterface
 {
 
     use Configurable;
@@ -43,6 +44,7 @@ class EnvProviderSettings implements ProviderSettingsInterface
     public const string REQUEST_TIMEOUT = 'REQUEST_TIMEOUT';
     public const string TEMPERATURE = 'TEMPERATURE';
     public const string THINKING_LEVEL = 'THINKING_LEVEL';
+    public const string WORKSPACE_ID = 'WORKSPACE_ID';
 
     public const string DEFAULT_PROVIDER = ProviderFactory::PROVIDER_ANTHROPIC;
     public const int DEFAULT_TIMEOUT_SECONDS = 90;
@@ -52,11 +54,12 @@ class EnvProviderSettings implements ProviderSettingsInterface
     /**
      * Names whose shared value is only used when the module and the shared provider agree.
      */
-    private const array CREDENTIAL_NAMES = [self::API_KEY, self::MODEL];
+    private const array CREDENTIAL_NAMES = [self::API_KEY, self::MODEL, self::WORKSPACE_ID];
 
     /**
      * Per module fallbacks, keyed by module prefix such as "SEO". Each entry may hold provider,
-     * api_key, model, max_tokens, request_timeout, temperature and thinking_level, plus a
+     * api_key, model, max_tokens, request_timeout, temperature, thinking_level and
+     * workspace_id, plus a
      * "providers" map of provider name to the same keys, which wins over the module level
      * value while that provider is selected.
      *
@@ -189,12 +192,22 @@ class EnvProviderSettings implements ProviderSettingsInterface
     }
 
     /**
+     * The vendor workspace to run requests in (Anthropic's anthropic-workspace-id), or null.
+     * Resolved like the API key, so a shared AI_WORKSPACE_ID only applies to the shared
+     * provider.
+     */
+    public function getWorkspaceId(): ?string
+    {
+        return $this->lookup(self::WORKSPACE_ID);
+    }
+
+    /**
      * The environment part of the chain on its own: the module's variable, then the shared
      * one. Lets a module that keeps its own YAML settings reuse the same variable rules.
      *
      * @param string|null $provider The module's resolved provider name, used to decide whether
-     *     the shared API key and model apply. Null resolves it through this class's own chain,
-     *     which a module that keeps its provider in its own YAML must not rely on.
+     *     the shared API key, model and workspace apply. Null resolves it through this class's
+     *     own chain, which a module that keeps its provider in its own YAML must not rely on.
      */
     public function getEnvValue(string $name, ?string $provider = null): ?string
     {
@@ -210,8 +223,8 @@ class EnvProviderSettings implements ProviderSettingsInterface
     }
 
     /**
-     * The shared variable, AI_<NAME>, or null when unset or blank. The shared API key and model
-     * are also null unless the module's provider is the shared provider.
+     * The shared variable, AI_<NAME>, or null when unset or blank. The shared API key, model
+     * and workspace are also null unless the module's provider is the shared provider.
      *
      * @param string|null $provider The module's resolved provider name; null resolves it through
      *     this class's own chain.
@@ -228,8 +241,8 @@ class EnvProviderSettings implements ProviderSettingsInterface
     }
 
     /**
-     * The provider the shared AI_API_KEY and AI_MODEL belong to: AI_PROVIDER, or the default
-     * provider when that is unset.
+     * The provider the shared AI_API_KEY, AI_MODEL and AI_WORKSPACE_ID belong to: AI_PROVIDER,
+     * or the default provider when that is unset.
      */
     public function getSharedProviderName(): string
     {
@@ -237,8 +250,8 @@ class EnvProviderSettings implements ProviderSettingsInterface
     }
 
     /**
-     * Resolves one setting through the environment and YAML chain. The API key and model
-     * prefer the module's YAML over the shared variable.
+     * Resolves one setting through the environment and YAML chain. The API key, model and
+     * workspace prefer the module's YAML over the shared variable.
      */
     protected function lookup(string $name): ?string
     {

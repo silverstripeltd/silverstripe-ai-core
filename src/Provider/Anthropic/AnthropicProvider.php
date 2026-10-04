@@ -9,12 +9,17 @@ use SilverstripeLtd\AiCore\Provider\HttpChatProvider;
 use SilverstripeLtd\AiCore\Provider\Message\ChatRequest;
 use SilverstripeLtd\AiCore\Provider\Message\ChatResponse;
 use SilverstripeLtd\AiCore\Settings\ProviderSettingsInterface;
+use SilverstripeLtd\AiCore\Settings\WorkspaceSettingsInterface;
 
 /**
  * Chat provider backed by the Anthropic Messages API.
  *
  * One HTTP request per chat() call and no retries; callers decide whether a transient failure
  * is worth another attempt. See HttpChatProvider for error classification and redaction.
+ *
+ * When the settings implement WorkspaceSettingsInterface and name a workspace, every request
+ * carries it in the anthropic-workspace-id header (needed for a key that is not scoped to a
+ * workspace). The workspace id is redacted from error detail like the key.
  */
 class AnthropicProvider extends HttpChatProvider
 {
@@ -27,6 +32,7 @@ class AnthropicProvider extends HttpChatProvider
     private const string LABEL = 'Anthropic';
     private const string HEADER_API_KEY = 'x-api-key';
     private const string HEADER_VERSION = 'anthropic-version';
+    private const string HEADER_WORKSPACE = 'anthropic-workspace-id';
 
     private readonly RequestMapper $mapper;
     private readonly ResponseParser $parser;
@@ -66,10 +72,26 @@ class AnthropicProvider extends HttpChatProvider
 
     protected function getHeaders(string $apiKey): array
     {
-        return [
+        $headers = [
             self::HEADER_API_KEY => $apiKey,
             self::HEADER_VERSION => self::API_VERSION,
         ];
+        $workspaceId = $this->resolveWorkspaceId();
+
+        if ($workspaceId !== null) {
+            $headers[self::HEADER_WORKSPACE] = $workspaceId;
+        }
+
+        return $headers;
+    }
+
+    protected function getRedactedValues(): array
+    {
+        $workspaceId = $this->resolveWorkspaceId();
+
+        return $workspaceId === null
+            ? []
+            : [$workspaceId];
     }
 
     protected function toPayload(ChatRequest $request): array
@@ -80,5 +102,23 @@ class AnthropicProvider extends HttpChatProvider
     protected function parse(array $data): ChatResponse
     {
         return $this->parser->parse($data);
+    }
+
+    /**
+     * The settings' workspace, or null when they cannot name one or leave it blank.
+     */
+    private function resolveWorkspaceId(): ?string
+    {
+        $settings = $this->getSettings();
+
+        if (!$settings instanceof WorkspaceSettingsInterface) {
+            return null;
+        }
+
+        $workspaceId = trim((string) $settings->getWorkspaceId());
+
+        return $workspaceId === ''
+            ? null
+            : $workspaceId;
     }
 }

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Anthropic workspaces: the optional `WorkspaceSettingsInterface::getWorkspaceId()` (kept
+  separate so existing `ProviderSettingsInterface` implementations need no change), implemented
+  by `EnvProviderSettings` from `AI_<MODULE>_WORKSPACE_ID`, the shared `AI_WORKSPACE_ID` (only
+  for the shared provider, like the key) and `workspace_id` in YAML. The Anthropic provider
+  sends it as the `anthropic-workspace-id` header, which keys not scoped to a workspace need,
+  and redacts it from error detail. Other providers ignore it.
+
 - `ProviderException::getRetryAfterSeconds()` carries the provider's retry hint (Gemini
   `RetryInfo`, `retry-after-ms` and `retry-after` headers) and `isDailyQuotaExhausted()`
   tells a used up Gemini daily quota from a short busy period.

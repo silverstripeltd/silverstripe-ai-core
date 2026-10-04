@@ -21,6 +21,7 @@ class EnvProviderSettingsTest extends SapphireTest
         EnvProviderSettings::REQUEST_TIMEOUT,
         EnvProviderSettings::TEMPERATURE,
         EnvProviderSettings::THINKING_LEVEL,
+        EnvProviderSettings::WORKSPACE_ID,
     ];
 
     private const array PREFIXES = ['AI_', 'AI_TEST_', 'AI_OTHER_'];
@@ -66,6 +67,7 @@ class EnvProviderSettingsTest extends SapphireTest
         $this->assertSame(EnvProviderSettings::DEFAULT_TIMEOUT_SECONDS, $settings->getTimeoutSeconds());
         $this->assertNull($settings->getTemperature());
         $this->assertNull($settings->getThinkingLevel());
+        $this->assertNull($settings->getWorkspaceId());
         $this->assertFalse($settings->hasApiKey());
     }
 
@@ -313,6 +315,57 @@ class EnvProviderSettingsTest extends SapphireTest
         Environment::setEnv('AI_TEST_API_KEY', 'module-env-key');
 
         $this->assertSame('module-env-key', $settings->getApiKey());
+    }
+
+    public function testModuleWorkspaceWinsOverTheSharedOne(): void
+    {
+        Environment::setEnv('AI_WORKSPACE_ID', 'wrkspc_shared');
+
+        $this->assertSame('wrkspc_shared', EnvProviderSettings::forModule('test')->getWorkspaceId());
+        $this->assertSame('wrkspc_shared', EnvProviderSettings::create()->getWorkspaceId());
+
+        Environment::setEnv('AI_TEST_WORKSPACE_ID', ' wrkspc_module ');
+
+        $this->assertSame('wrkspc_module', EnvProviderSettings::forModule('test')->getWorkspaceId());
+        $this->assertSame('wrkspc_shared', EnvProviderSettings::forModule('other')->getWorkspaceId());
+    }
+
+    public function testSharedWorkspaceIsSkippedWhenTheModulePicksAnotherProvider(): void
+    {
+        Environment::setEnv('AI_PROVIDER', 'anthropic');
+        Environment::setEnv('AI_WORKSPACE_ID', 'wrkspc_shared');
+        Environment::setEnv('AI_TEST_PROVIDER', 'openai');
+
+        $settings = EnvProviderSettings::forModule('test');
+
+        $this->assertNull($settings->getWorkspaceId());
+        $this->assertNull($settings->getEnvValue(EnvProviderSettings::WORKSPACE_ID, 'openai'));
+        $this->assertSame('wrkspc_shared', $settings->getEnvValue(EnvProviderSettings::WORKSPACE_ID, 'anthropic'));
+        $this->assertSame('wrkspc_shared', EnvProviderSettings::forModule('other')->getWorkspaceId());
+
+        Environment::setEnv('AI_TEST_WORKSPACE_ID', 'wrkspc_module');
+
+        $this->assertSame('wrkspc_module', $settings->getWorkspaceId());
+    }
+
+    public function testWorkspaceFallsBackToYamlWithTheProviderOverrideFirst(): void
+    {
+        Config::modify()->merge(EnvProviderSettings::class, 'modules', [
+            'TEST' => ['providers' => ['anthropic' => ['workspace_id' => 'wrkspc_module_yaml']]],
+        ]);
+        Config::modify()->merge(EnvProviderSettings::class, 'shared', ['workspace_id' => 'wrkspc_shared_yaml']);
+
+        $this->assertSame('wrkspc_module_yaml', EnvProviderSettings::forModule('test')->getWorkspaceId());
+        $this->assertSame('wrkspc_shared_yaml', EnvProviderSettings::forModule('other')->getWorkspaceId());
+
+        Environment::setEnv('AI_WORKSPACE_ID', 'wrkspc_shared_env');
+
+        $this->assertSame('wrkspc_module_yaml', EnvProviderSettings::forModule('test')->getWorkspaceId());
+        $this->assertSame('wrkspc_shared_env', EnvProviderSettings::forModule('other')->getWorkspaceId());
+
+        Environment::setEnv('AI_TEST_PROVIDER', 'gemini');
+
+        $this->assertSame('wrkspc_shared_yaml', EnvProviderSettings::forModule('test')->getWorkspaceId());
     }
 
     public function testEnvValueUsesTheProviderTheCallerResolved(): void

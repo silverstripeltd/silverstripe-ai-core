@@ -41,6 +41,11 @@ ProviderException with the vendor's message in dev mode.
 - Parallel tool calls are on (the API default); every result returns in one user message.
 - Usage: `input_tokens` is uncached input; `cache_read_input_tokens` and
   `cache_creation_input_tokens` are reported separately.
+- Workspace: when the settings implement `WorkspaceSettingsInterface` and return a workspace
+  id (`AI_WORKSPACE_ID`, `AI_<MODULE>_WORKSPACE_ID` or `workspace_id` in YAML), every request
+  carries the `anthropic-workspace-id` header. A key that is not scoped to a workspace needs
+  it; without it the API answers HTTP 400. No id, or settings without the interface, sends no
+  header. The id is redacted from error detail like the key. OpenAI and Gemini ignore it.
 
 ## OpenAI
 
@@ -252,6 +257,7 @@ a name here, and extends `SilverstripeLtd\AiCore\Tests\Conformance\ProviderConfo
 (autoloaded with the package) with its own fixtures, overriding `getFixtureRoot()`. An HTTP
 vendor can extend `HttpChatProvider`, which supplies the transport, error classification,
 redaction and the binding to `ProviderSettingsInterface`, and only needs an endpoint, headers,
-a request mapper and a response parser. Implement `SettingsAwareProviderInterface` (as
+a request mapper and a response parser. Any other secret it sends in a header (such as a
+workspace id) goes in `getRedactedValues()` so it is redacted like the key. Implement `SettingsAwareProviderInterface` (as
 `HttpChatProvider` does) so `ProviderFactory::forSettings()` can bind one service to each
 module's settings.

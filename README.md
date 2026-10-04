@@ -48,6 +48,7 @@ AI_SEO_API_KEY="..."
 | Timeout | `AI_REQUEST_TIMEOUT` | `AI_<MODULE>_REQUEST_TIMEOUT` | `request_timeout` | Seconds per call, 90 when nothing sets it |
 | Temperature | `AI_TEMPERATURE` | `AI_<MODULE>_TEMPERATURE` | `temperature` | Unset leaves the vendor default and sends nothing |
 | Thinking level | `AI_THINKING_LEVEL` | `AI_<MODULE>_THINKING_LEVEL` | `thinking_level` | Passed as is: Anthropic effort, OpenAI `reasoning_effort`, Gemini `thinkingLevel`. `none` sends nothing (OpenAI receives `none`) |
+| Workspace | `AI_WORKSPACE_ID` | `AI_<MODULE>_WORKSPACE_ID` | `workspace_id` | Optional. Anthropic only: sent as the `anthropic-workspace-id` header, which a key not scoped to a workspace requires. Unset sends nothing; other providers ignore it |
 
 `<MODULE>` is the module's prefix: `SEO`, `REFINE`, `COMPOSE`, `TRANSLATE`, `CONTENT_ENGINEER`.
 
@@ -63,14 +64,30 @@ For each setting the first non blank value wins:
    `EnvProviderSettings.shared.<key>`
 5. the provider's built-in default
 
-Two exceptions for the API key and model:
+Two exceptions for the API key, model and workspace:
 
-- The shared `AI_API_KEY` and `AI_MODEL` belong to the shared provider, which is `AI_PROVIDER`,
-  or `anthropic` when that is unset. They are used only for a module whose resolved provider
-  (from any step above) is that same provider, so a key for one vendor is never sent to another.
-  Set `AI_PROVIDER` whenever you set `AI_API_KEY` for a vendor other than Anthropic.
-- A key or model in the module's own YAML entry (step 3) wins over the shared variable
-  (step 2), since it was set for that module specifically.
+- The shared `AI_API_KEY`, `AI_MODEL` and `AI_WORKSPACE_ID` belong to the shared provider,
+  which is `AI_PROVIDER`, or `anthropic` when that is unset. They are used only for a module
+  whose resolved provider (from any step above) is that same provider, so a key or workspace
+  for one vendor is never sent to another. Set `AI_PROVIDER` whenever you set `AI_API_KEY` for
+  a vendor other than Anthropic.
+- A key, model or workspace in the module's own YAML entry (step 3) wins over the shared
+  variable (step 2), since it was set for that module specifically.
+
+### Anthropic workspaces
+
+An Anthropic key that is not scoped to a workspace is rejected with HTTP 400 ("This API key
+is not scoped to a workspace, so this request must include the anthropic-workspace-id
+header") unless every request names one. Set the workspace id next to the key:
+
+```
+AI_PROVIDER="anthropic"
+AI_API_KEY="..."
+AI_WORKSPACE_ID="wrkspc_..."
+```
+
+or per module with `AI_<MODULE>_WORKSPACE_ID`. The id is treated like the key: it only travels
+in the header and is never written to logs or exception messages.
 
 Invalid values (a non numeric timeout, a negative max tokens) raise a blocking
 `SettingsException` naming the variable, never echoing its value.
@@ -185,6 +202,19 @@ A module with its own configuration class implements `ProviderSettingsInterface`
 would go. `EnvProviderSettings::getEnvValue()` exposes the environment part of the chain on
 its own, so such a class can keep the same variable rules.
 
+To support Anthropic workspaces, such a class also implements the optional
+`Settings\WorkspaceSettingsInterface` (`getWorkspaceId(): ?string`). It is a separate
+interface so existing settings classes keep working; without it no workspace header is sent.
+Reusing the shared rules looks like this:
+
+```php
+public function getWorkspaceId(): ?string
+{
+    return EnvProviderSettings::forModule('SEO')
+        ->getEnvValue(EnvProviderSettings::WORKSPACE_ID, $this->getProviderName());
+}
+```
+
 ## Errors
 
 Every failure is a `Provider\ProviderException`:
@@ -199,8 +229,8 @@ Every failure is a `Provider\ProviderException`:
 - `isDailyQuotaExhausted()`: a per day allowance ran out (a Gemini quota id containing
   `PerDay`), so waiting a few seconds will not help.
 
-Nothing retries inside the package; callers decide. Messages never contain an API key, and the
-vendor's own error text is only appended in dev mode.
+Nothing retries inside the package; callers decide. Messages never contain an API key or a
+workspace id, and the vendor's own error text is only appended in dev mode.
 
 ## Testing
 

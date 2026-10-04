@@ -29,10 +29,13 @@ use SilverstripeLtd\AiCore\Provider\Message\ToolSchema;
 use SilverstripeLtd\AiCore\Provider\Message\ToolUseBlock;
 use SilverstripeLtd\AiCore\Provider\ProviderException;
 use SilverstripeLtd\AiCore\Settings\EnvProviderSettings;
+use SilverstripeLtd\AiCore\Settings\ProviderSettingsInterface;
 
 class AnthropicProviderTest extends SapphireTest
 {
     private const string SECRET = 'sk-ant-test-secret-3b9c1d';
+    private const string WORKSPACE = 'wrkspc_01TestWorkspace7Q';
+    private const string HEADER_WORKSPACE = 'anthropic-workspace-id';
 
     private const array ENV_VARS = [
         'AI_PROVIDER',
@@ -42,6 +45,9 @@ class AnthropicProviderTest extends SapphireTest
         'AI_REQUEST_TIMEOUT',
         'AI_TEMPERATURE',
         'AI_THINKING_LEVEL',
+        'AI_WORKSPACE_ID',
+        'AI_TEST_PROVIDER',
+        'AI_TEST_WORKSPACE_ID',
     ];
 
     /**
@@ -93,6 +99,143 @@ class AnthropicProviderTest extends SapphireTest
         $this->assertSame(AnthropicProvider::API_VERSION, $sent->getHeaderLine('anthropic-version'));
         $this->assertSame(self::SECRET, $sent->getHeaderLine('x-api-key'));
         $this->assertSame('application/json', $sent->getHeaderLine('Content-Type'));
+    }
+
+    public function testWorkspaceHeaderIsSentWhenAWorkspaceIsSet(): void
+    {
+        Environment::setEnv('AI_WORKSPACE_ID', self::WORKSPACE);
+        $provider = $this->provider([self::apiResponse([['type' => 'text', 'text' => 'Hi']])]);
+
+        $provider->chat(self::request());
+
+        $this->assertSame(self::WORKSPACE, $this->sentRequest()->getHeaderLine(self::HEADER_WORKSPACE));
+        $this->assertSame(self::SECRET, $this->sentRequest()->getHeaderLine('x-api-key'));
+        $this->assertStringNotContainsString(self::WORKSPACE, (string) $this->sentRequest()->getBody());
+    }
+
+    public function testNoWorkspaceHeaderWhenNoWorkspaceIsSet(): void
+    {
+        Environment::setEnv('AI_WORKSPACE_ID', '   ');
+        $provider = $this->provider([self::apiResponse([['type' => 'text', 'text' => 'Hi']])]);
+
+        $provider->chat(self::request());
+
+        $this->assertFalse($this->sentRequest()->hasHeader(self::HEADER_WORKSPACE));
+    }
+
+    public function testModuleWorkspaceWinsOverTheSharedOne(): void
+    {
+        Environment::setEnv('AI_WORKSPACE_ID', 'wrkspc_shared');
+        Environment::setEnv('AI_TEST_WORKSPACE_ID', self::WORKSPACE);
+        $provider = $this->provider([self::apiResponse([['type' => 'text', 'text' => 'Hi']])])
+            ->withSettings(EnvProviderSettings::forModule('test'));
+
+        $provider->chat(self::request());
+
+        $this->assertSame(self::WORKSPACE, $this->sentRequest()->getHeaderLine(self::HEADER_WORKSPACE));
+    }
+
+    public function testSharedWorkspaceIsNotSentWhenTheModuleUsesAnotherProvider(): void
+    {
+        // The shared workspace belongs to OpenAI here; a module on Anthropic must not borrow it.
+        Environment::setEnv('AI_PROVIDER', 'openai');
+        Environment::setEnv('AI_WORKSPACE_ID', 'wrkspc_shared');
+        Environment::setEnv('AI_TEST_PROVIDER', 'anthropic');
+        Config::modify()->merge(EnvProviderSettings::class, 'modules', ['TEST' => ['api_key' => self::SECRET]]);
+        $provider = $this->provider([self::apiResponse([['type' => 'text', 'text' => 'Hi']])])
+            ->withSettings(EnvProviderSettings::forModule('test'));
+
+        $provider->chat(self::request());
+
+        $this->assertFalse($this->sentRequest()->hasHeader(self::HEADER_WORKSPACE));
+    }
+
+    public function testSettingsWithoutWorkspaceSupportSendNoWorkspaceHeader(): void
+    {
+        Environment::setEnv('AI_WORKSPACE_ID', self::WORKSPACE);
+        $settings = new class (self::SECRET) implements ProviderSettingsInterface {
+            public function __construct(private readonly string $key)
+            {
+            }
+
+            public function getProviderName(): string
+            {
+                return 'anthropic';
+            }
+
+            public function getApiKey(): string
+            {
+                return $this->key;
+            }
+
+            public function getModel(): ?string
+            {
+                return null;
+            }
+
+            public function getMaxTokens(): ?int
+            {
+                return null;
+            }
+
+            public function getTimeoutSeconds(): int
+            {
+                return 10;
+            }
+
+            public function getTemperature(): ?float
+            {
+                return null;
+            }
+
+            public function getThinkingLevel(): ?string
+            {
+                return null;
+            }
+        };
+        $provider = $this->provider([self::apiResponse([['type' => 'text', 'text' => 'Hi']])])
+            ->withSettings($settings);
+
+        $provider->chat(self::request());
+
+        $this->assertSame(self::SECRET, $this->sentRequest()->getHeaderLine('x-api-key'));
+        $this->assertFalse($this->sentRequest()->hasHeader(self::HEADER_WORKSPACE));
+    }
+
+    public function testWorkspaceIdNeverAppearsInExceptionMessages(): void
+    {
+        Environment::setEnv('AI_WORKSPACE_ID', self::WORKSPACE);
+        $kernel = Injector::inst()->get(Kernel::class);
+        $original = $kernel->getEnvironment();
+        $leak = sprintf('Workspace %s does not exist', self::WORKSPACE);
+
+        try {
+            $kernel->setEnvironment(Kernel::DEV);
+            $failures = [
+                [self::errorResponse(400, $leak)],
+                [self::errorResponse(403, $leak)],
+                [self::errorResponse(500, $leak)],
+            ];
+
+            foreach ($failures as $queue) {
+                $exception = $this->chatExpectingFailure($queue);
+
+                $this->assertStringNotContainsString(self::WORKSPACE, $exception->getMessage());
+                $this->assertStringNotContainsString(self::WORKSPACE, (string) $exception);
+                $this->assertStringContainsString('Workspace [redacted] does not exist', $exception->getMessage());
+            }
+
+            // Like the key, a transport error keeps Guzzle's own exception as the previous one;
+            // the provider's message is redacted.
+            $exception = $this->chatExpectingFailure([
+                new ConnectException($leak, new Request('POST', AnthropicProvider::ENDPOINT)),
+            ]);
+
+            $this->assertStringNotContainsString(self::WORKSPACE, $exception->getMessage());
+            $this->assertStringContainsString('Workspace [redacted] does not exist', $exception->getMessage());
+        } finally {
+            $kernel->setEnvironment($original);
+        }
     }
 
     public function testModelMaxTokensAndSystemPrefixShaping(): void

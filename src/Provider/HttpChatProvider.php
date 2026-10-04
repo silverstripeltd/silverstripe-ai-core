@@ -25,8 +25,9 @@ use SilverstripeLtd\AiCore\Settings\ProviderSettingsInterface;
  *
  * Subclasses supply the endpoint, the headers, the request body and the response parser. The
  * API key only ever travels in a header, never in the URL, so transport errors (which quote
- * the URL) cannot leak it. Exception messages never include the key, and the vendor's own
- * error text is only appended in dev mode because it can describe the request in detail.
+ * the URL) cannot leak it. Exception messages never include the key (or any other value a
+ * subclass lists in getRedactedValues()), and the vendor's own error text is only appended in
+ * dev mode because it can describe the request in detail.
  *
  * Classification: missing key, 401 and 403 are blocking; 429, 5xx and network failures are
  * transient; everything else (other 4xx, unreadable bodies) is permanent. Subclasses refine
@@ -235,6 +236,17 @@ abstract class HttpChatProvider implements SettingsAwareProviderInterface
     }
 
     /**
+     * Values besides the API key that must never appear in an exception message, such as a
+     * workspace id sent in a header. Blank values are ignored.
+     *
+     * @return array<int, string>
+     */
+    protected function getRedactedValues(): array
+    {
+        return [];
+    }
+
+    /**
      * Settings implementations may signal a missing key with their own exception type; any
      * of them becomes a blocking ProviderException here.
      *
@@ -334,7 +346,8 @@ abstract class HttpChatProvider implements SettingsAwareProviderInterface
     }
 
     /**
-     * Provider detail is only surfaced in dev, and never with the key in it.
+     * Provider detail is only surfaced in dev, and never with the key or another redacted
+     * value in it.
      */
     private function detail(string $text, string $apiKey): string
     {
@@ -342,7 +355,12 @@ abstract class HttpChatProvider implements SettingsAwareProviderInterface
             return '';
         }
 
-        return ' ' . str_replace($apiKey, self::REDACTED, $text);
+        $secrets = array_filter(
+            [$apiKey, ...$this->getRedactedValues()],
+            static fn (string $value): bool => $value !== '',
+        );
+
+        return ' ' . str_replace($secrets, self::REDACTED, $text);
     }
 
     private function getHttpClient(): ClientInterface

@@ -37,6 +37,7 @@ abstract class HttpProviderTestCase extends SapphireTest
         'AI_REQUEST_TIMEOUT',
         'AI_TEMPERATURE',
         'AI_THINKING_LEVEL',
+        'AI_WORKSPACE_ID',
     ];
 
     /**
@@ -81,6 +82,17 @@ abstract class HttpProviderTestCase extends SapphireTest
         }
 
         parent::tearDown();
+    }
+
+    public function testWorkspaceIdIsIgnored(): void
+    {
+        Environment::setEnv('AI_WORKSPACE_ID', 'wrkspc_shared_vendor_test');
+
+        $this->provider([$this->fixture('text_reply')])->chat(self::request());
+
+        $this->assertFalse($this->sentRequest()->hasHeader('anthropic-workspace-id'));
+        $this->assertStringNotContainsString('wrkspc_', json_encode($this->sentRequest()->getHeaders()));
+        $this->assertStringNotContainsString('wrkspc_', (string) $this->sentRequest()->getBody());
     }
 
     /**
