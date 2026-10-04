@@ -102,6 +102,13 @@ class AnthropicConformanceTest extends ProviderConformanceTestCase
         return $images;
     }
 
+    protected function assertConversationCacheRequested(array $payload): void
+    {
+        $this->assertSame(['type' => 'ephemeral'], $payload['cache_control']);
+        $this->assertSame(['type' => 'ephemeral'], $payload['system'][1]['cache_control']);
+        $this->assertArrayNotHasKey('cache_control', $payload['system'][2]);
+    }
+
     protected function correlationRef(ToolUseBlock $use): string
     {
         return $use->id;

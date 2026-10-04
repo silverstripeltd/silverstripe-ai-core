@@ -197,6 +197,18 @@ abstract class ProviderConformanceTestCase extends SapphireTest
         return true;
     }
 
+    /**
+     * Checks the wire form of a request that asked for conversation caching. Providers that
+     * cache implicitly (OpenAI, Gemini) send nothing extra, so by default there is nothing to
+     * check beyond the conversation arriving intact.
+     *
+     * @param array<string, mixed> $payload
+     */
+    protected function assertConversationCacheRequested(array $payload): void
+    {
+        $this->assertArrayNotHasKey('cache_control', $payload);
+    }
+
     protected function usesHttp(): bool
     {
         return true;
@@ -507,6 +519,33 @@ abstract class ProviderConformanceTestCase extends SapphireTest
         }
 
         $this->assertStringNotContainsString('stray system message', (string) $this->sentRequest()->getBody());
+    }
+
+    public function testConversationCachingLeavesTheConversationIntact(): void
+    {
+        $messages = [
+            ChatMessage::fromText(Role::User, 'Hello'),
+            ChatMessage::fromText(Role::Assistant, 'Hi there'),
+            ChatMessage::fromText(Role::User, 'Find the home page'),
+        ];
+        $base = self::request($messages);
+        $cached = new ChatRequest(
+            $base->system,
+            $base->messages,
+            $base->tools,
+            $base->options->withConversationCache(),
+        );
+
+        $response = $this->chatWithFixtures($cached, 'text_reply');
+        $payload = $this->sentPayload();
+
+        $this->assertSame(self::TEXT_REPLY, $response->getText());
+        $this->assertSame(['Hello', 'Hi there', 'Find the home page'], $this->conversationTexts($payload));
+        $this->assertSame(
+            implode("\n\n", [self::PREFIX_RULES, self::PREFIX_TOOLS, self::SYSTEM_TEXT]),
+            $this->systemText($payload),
+        );
+        $this->assertConversationCacheRequested($payload);
     }
 
     public function testModelAndMaxTokensAreSent(): void

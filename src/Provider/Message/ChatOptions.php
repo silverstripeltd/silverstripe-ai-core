@@ -23,6 +23,10 @@ final readonly class ChatOptions
      *     per request system prompt and marked for provider side prompt caching
      * @param string|null $reasoningEffort Vendor reasoning level passed through as is (Anthropic
      *     effort, OpenAI reasoning_effort, Gemini thinkingLevel). Null leaves the model default.
+     * @param bool $cacheConversation Ask the provider to cache the conversation as well as the
+     *     system prefix, for callers that resend a growing conversation (agent loops). Off by
+     *     default: on a one off request the cache write premium is never earned back. Providers
+     *     that cache implicitly (OpenAI, Gemini) ignore it.
      */
     public function __construct(
         public string $model,
@@ -31,6 +35,7 @@ final readonly class ChatOptions
         public float $temperature = self::DEFAULT_TEMPERATURE,
         public array $cacheableSystemPrefix = [],
         public ?string $reasoningEffort = null,
+        public bool $cacheConversation = false,
     ) {
     }
 
@@ -53,6 +58,7 @@ final readonly class ChatOptions
             is_string($effort) && $effort !== ''
                 ? $effort
                 : null,
+            (bool) ($data['cache_conversation'] ?? false),
         );
     }
 
@@ -68,6 +74,7 @@ final readonly class ChatOptions
             'temperature' => $this->temperature,
             'cacheable_system_prefix' => $this->cacheableSystemPrefix,
             'reasoning_effort' => $this->reasoningEffort,
+            'cache_conversation' => $this->cacheConversation,
         ];
     }
 
@@ -83,6 +90,7 @@ final readonly class ChatOptions
             $this->temperature,
             $prefix,
             $this->reasoningEffort,
+            $this->cacheConversation,
         );
     }
 
@@ -95,6 +103,7 @@ final readonly class ChatOptions
             $this->temperature,
             $this->cacheableSystemPrefix,
             $this->reasoningEffort,
+            $this->cacheConversation,
         );
     }
 
@@ -107,6 +116,7 @@ final readonly class ChatOptions
             $temperature,
             $this->cacheableSystemPrefix,
             $this->reasoningEffort,
+            $this->cacheConversation,
         );
     }
 
@@ -119,6 +129,20 @@ final readonly class ChatOptions
             $this->temperature,
             $this->cacheableSystemPrefix,
             $reasoningEffort,
+            $this->cacheConversation,
+        );
+    }
+
+    public function withConversationCache(bool $enabled = true): self
+    {
+        return new self(
+            $this->model,
+            $this->maxTokens,
+            $this->timeoutSeconds,
+            $this->temperature,
+            $this->cacheableSystemPrefix,
+            $this->reasoningEffort,
+            $enabled,
         );
     }
 

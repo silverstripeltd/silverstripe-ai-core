@@ -258,6 +258,91 @@ class AnthropicProviderTest extends SapphireTest
         $this->assertArrayNotHasKey('tool_choice', $payload);
     }
 
+    public function testConversationCacheAddsTopLevelCacheControlAndKeepsThePrefixBreakpoint(): void
+    {
+        $provider = $this->provider([self::apiResponse([['type' => 'text', 'text' => 'Hi']])]);
+        $options = (new ChatOptions('model-x', 512, 30, ChatOptions::DEFAULT_TEMPERATURE, ['Rules', 'Tool docs']))
+            ->withConversationCache();
+        $messages = [
+            ChatMessage::fromText(Role::User, 'Find the home page'),
+            new ChatMessage(Role::Assistant, [new ToolUseBlock('toolu_1', 'records.search', ['q' => 'home'])]),
+            new ChatMessage(Role::Tool, [new ToolResultBlock('toolu_1', '{"id":1}')]),
+        ];
+
+        $provider->chat(self::request($messages, [self::searchTool()], 'Today is Monday', $options));
+
+        $payload = $this->sentPayload();
+        $this->assertSame(['type' => 'ephemeral'], $payload['cache_control']);
+        $this->assertSame(['type' => 'ephemeral'], $payload['system'][1]['cache_control']);
+        $this->assertArrayNotHasKey('cache_control', $payload['system'][2], 'the per request text stays after it');
+
+        foreach ($payload['messages'] as $message) {
+            foreach ($message['content'] as $block) {
+                $this->assertArrayNotHasKey('cache_control', $block, 'the API places the history breakpoint');
+            }
+        }
+
+        $body = (string) $this->sentRequest()->getBody();
+        $this->assertSame(2, substr_count($body, '"cache_control"'), 'two of the four breakpoints are used');
+    }
+
+    public function testConversationCacheIsOffByDefault(): void
+    {
+        $provider = $this->provider([
+            self::apiResponse([['type' => 'text', 'text' => 'Hi']]),
+            self::apiResponse([['type' => 'text', 'text' => 'Hi']]),
+        ]);
+
+        $provider->chat(
+            self::request([], [], 'x', new ChatOptions('m', 1, 1, ChatOptions::DEFAULT_TEMPERATURE, ['P'])),
+        );
+        $this->assertArrayNotHasKey('cache_control', $this->sentPayload());
+
+        $this->history = [];
+        $provider->chat(self::request([], [], 'x', (new ChatOptions('m', 1, 1))->withConversationCache(false)));
+        $this->assertArrayNotHasKey('cache_control', $this->sentPayload());
+    }
+
+    public function testConversationCacheIsNotSentWithoutMessages(): void
+    {
+        $provider = $this->provider([self::apiResponse([['type' => 'text', 'text' => 'Hi']])]);
+        $request = new ChatRequest('x', [], [], (new ChatOptions('m', 1, 1))->withConversationCache());
+
+        $provider->chat($request);
+
+        $this->assertArrayNotHasKey('cache_control', $this->sentPayload());
+    }
+
+    public function testEachStepResendsThePreviousStepsMessagesUnchangedAsItsPrefix(): void
+    {
+        $provider = $this->provider([
+            self::apiResponse(
+                [['type' => 'tool_use', 'id' => 'toolu_1', 'name' => 'records_search', 'input' => []]],
+                'tool_use',
+            ),
+            self::apiResponse([['type' => 'text', 'text' => 'Done']]),
+        ]);
+        $options = (new ChatOptions('m', 64, 10, ChatOptions::DEFAULT_TEMPERATURE, ['Rules']))
+            ->withConversationCache();
+        $messages = [ChatMessage::fromText(Role::User, 'Find the home page')];
+
+        $first = $provider->chat(self::request($messages, [self::searchTool()], 'ctx', $options));
+        $messages[] = $first->message;
+        $messages[] = new ChatMessage(Role::Tool, [new ToolResultBlock('toolu_1', '{"id":1}')]);
+        $provider->chat(self::request($messages, [self::searchTool()], 'ctx', $options));
+
+        $this->assertCount(2, $this->history);
+        $firstPayload = json_decode((string) $this->history[0]['request']->getBody(), true, 512, JSON_THROW_ON_ERROR);
+        $secondPayload = json_decode((string) $this->history[1]['request']->getBody(), true, 512, JSON_THROW_ON_ERROR);
+
+        $this->assertSame($firstPayload['system'], $secondPayload['system']);
+        $this->assertSame($firstPayload['tools'], $secondPayload['tools']);
+        $this->assertSame(
+            $firstPayload['messages'],
+            array_slice($secondPayload['messages'], 0, count($firstPayload['messages'])),
+        );
+    }
+
     public function testSystemIsOmittedWhenEmptyAndTemperatureSentWhenNotDefault(): void
     {
         $provider = $this->provider([self::apiResponse([['type' => 'text', 'text' => 'Hi']])]);
@@ -624,6 +709,11 @@ class AnthropicProviderTest extends SapphireTest
     /**
      * @param array<int, mixed> $queue Responses or exceptions for the Guzzle MockHandler
      */
+    private static function searchTool(): ToolSchema
+    {
+        return new ToolSchema('records.search', 'Find records', ['type' => 'object', 'properties' => []]);
+    }
+
     private function provider(array $queue): AnthropicProvider
     {
         $stack = HandlerStack::create(new MockHandler($queue));

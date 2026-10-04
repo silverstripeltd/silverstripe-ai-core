@@ -41,6 +41,11 @@ class ScriptedConformanceTest extends ProviderConformanceTestCase
         return false;
     }
 
+    protected function assertConversationCacheRequested(array $payload): void
+    {
+        $this->assertTrue($payload['options']['cache_conversation'], 'the request records the option');
+    }
+
     protected function wireName(string $name): string
     {
         return $name;

@@ -203,6 +203,17 @@ class DtoRoundTripTest extends SapphireTest
             $options->withReasoningEffort(ChatOptions::REASONING_EFFORT_NONE)->getEffectiveReasoningEffort(),
         );
         $this->assertNull($options->withReasoningEffort(null)->getEffectiveReasoningEffort());
+
+        $cached = $options->withConversationCache();
+        $this->assertFalse($options->cacheConversation);
+        $this->assertTrue($cached->cacheConversation);
+        $this->assertEquals($cached, ChatOptions::fromArray($cached->toArray()));
+        $this->assertTrue(
+            $cached->withCacheableSystemPrefix(['x'])->withMaxTokens(1)->withTemperature(0.1)
+                ->withReasoningEffort('low')->cacheConversation,
+            'every variant keeps the setting',
+        );
+        $this->assertFalse($cached->withConversationCache(false)->cacheConversation);
     }
 
     public function testChatOptionsDefaults(): void
@@ -212,6 +223,7 @@ class DtoRoundTripTest extends SapphireTest
         $this->assertSame(ChatOptions::DEFAULT_TEMPERATURE, $options->temperature);
         $this->assertSame([], $options->cacheableSystemPrefix);
         $this->assertNull($options->reasoningEffort);
+        $this->assertFalse($options->cacheConversation);
     }
 
     public function testUsageRoundTrip(): void

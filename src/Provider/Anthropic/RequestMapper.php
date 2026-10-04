@@ -26,6 +26,12 @@ use stdClass;
  * tool_result blocks), Assistant as "assistant". System messages never appear in "messages";
  * the system prompt travels in the top-level "system" array instead, with the stable prefix
  * marked for prompt caching. A configured reasoning effort is sent as output_config.effort.
+ *
+ * When the options ask for conversation caching, the request also carries the top-level
+ * cache_control (automatic caching): the API places a breakpoint on the last block of the
+ * messages and moves it forward as the conversation grows, so each step of an agent loop reads
+ * the previous step's whole prompt from cache. With the system prefix breakpoint that is two of
+ * the four breakpoints a request may use.
  * Images travel as base64 image blocks in user messages; the API refuses them from the
  * assistant, so an image in an assistant message is dropped.
  */
@@ -67,6 +73,10 @@ final class RequestMapper
         }
 
         $payload['messages'] = $this->mapMessages($request->messages);
+
+        if ($options->cacheConversation && $payload['messages'] !== []) {
+            $payload['cache_control'] = self::CACHE_CONTROL;
+        }
 
         if ($options->temperature !== ChatOptions::DEFAULT_TEMPERATURE) {
             $payload['temperature'] = $options->temperature;

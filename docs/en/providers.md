@@ -38,6 +38,12 @@ ProviderException with the vendor's message in dev mode.
 - The cacheable prefix (instructions and the tool guide) goes first in the `system` array with
   a `cache_control` breakpoint on its last block; tool definitions render before it, so they
   are cached too. The per request system text follows uncached.
+- With `ChatOptions::withConversationCache()` the request also carries a top-level
+  `cache_control` (automatic caching): the API puts a second breakpoint on the last block of
+  the messages and moves it forward as the conversation grows, so each step of an agent loop
+  reads the previous step's whole prompt from cache. It is off by default, because a one off
+  request would pay the cache write premium on text that is never read back. The OpenAI and
+  Gemini mappers ignore it; both cache the repeated prefix on their own.
 - Parallel tool calls are on (the API default); every result returns in one user message.
 - Usage: `input_tokens` is uncached input; `cache_read_input_tokens` and
   `cache_creation_input_tokens` are reported separately.
@@ -161,6 +167,9 @@ neutral result for each:
 - system prompt placement: cacheable prefix first and in order, then the per request system
   prompt, in the vendor's system slot, never in a user turn, and System role transcript
   messages never sent;
+- conversation caching: a request that asks for it reaches the model with its conversation
+  and system prompt unchanged, and only Anthropic adds a marker (the top-level
+  `cache_control`) on the wire;
 - the model and the max tokens value on the wire;
 - image input: a user message with a prompt and an image reaches the model with both, the
   image in the vendor's base64 form, several images keep their order and media types, and an
@@ -204,7 +213,7 @@ large results, schema delivery (within each dialect) and system prompt placement
 | Replay state | none needed | none needed | thought signature per call, stored and replayed; skip value for foreign calls |
 | Schema strictness | JSON Schema as is, not strict | JSON Schema, `strict: false` | documented subset; some rules only enforced server side |
 | System prompt | top-level `system` blocks | leading `developer` message | `systemInstruction` parts |
-| Prompt caching | explicit `cache_control` breakpoint after the static prefix; reads and writes reported | automatic prefix caching plus `prompt_cache_key`; reads and writes reported | implicit caching on a stable prefix; reads reported, writes not |
+| Prompt caching | explicit `cache_control` breakpoint after the static prefix, plus automatic caching of the conversation when asked; reads and writes reported | automatic prefix caching plus `prompt_cache_key`; reads and writes reported | implicit caching on a stable prefix; reads reported, writes not |
 | Token accounting | input excludes cache | prompt includes cache (subtracted) | prompt includes cache (subtracted); thoughts added to output |
 | Stop reasons | `end_turn`, `tool_use`, `max_tokens`; `refusal`, `pause_turn`, `stop_sequence` become Other | `stop`, `tool_calls`, `length`; `content_filter` and refusals become Other | `STOP` (ToolUse when calls are present), `MAX_TOKENS`; `SAFETY`, `RECITATION`, `MALFORMED_FUNCTION_CALL` and the rest become Other |
 | Errors beyond the shared mapping | 529 overloaded is transient | 429 `insufficient_quota` is blocking | 400 `API_KEY_INVALID` and `FAILED_PRECONDITION` are blocking |
