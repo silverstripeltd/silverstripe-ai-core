@@ -177,6 +177,31 @@ limit every vendor accepts; anything else throws `InvalidArgumentException`, so 
 images first. Images in assistant messages are not sent, since no vendor accepts them there. Vendor details, the parity table
 and the conformance guarantee are in [docs/en/providers.md](docs/en/providers.md).
 
+### Reading web pages
+
+Some providers can read a public web page on their own servers when the conversation names
+its URL. Ask the provider first, then pass `WebReadingOptions` with the request:
+
+```php
+use SilverstripeLtd\AiCore\Provider\CapabilityAwareProviderInterface;
+use SilverstripeLtd\AiCore\Provider\Message\WebReadingOptions;
+use SilverstripeLtd\AiCore\Provider\ProviderCapability;
+
+$canRead = $provider instanceof CapabilityAwareProviderInterface
+    && $provider->supports(ProviderCapability::WebReading);
+
+$request = new ChatRequest($system, $messages, $tools, $options, $canRead
+    ? new WebReadingOptions(maxUses: 5, blockedDomains: ['intranet.example.com'], maxContentTokens: 30000)
+    : null);
+```
+
+Only Anthropic supports it for now (its `web_fetch` server tool, no extra charge beyond the
+tokens the page adds); OpenAI and Gemini report it as unavailable and ignore the option. The
+provider's calls come back as `ServerToolBlock`s: keep them in the transcript and send them
+back unchanged, because the vendor needs them again in later requests. They are never tool
+calls for you to run. A reply with `StopReason::PauseTurn` means the provider paused a long
+turn: send the conversation again, with that reply last, and it carries on.
+
 An Injector service can resolve straight to a provider for a module's settings:
 
 ```yaml

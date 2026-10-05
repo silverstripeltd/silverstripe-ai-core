@@ -52,6 +52,18 @@ ProviderException with the vendor's message in dev mode.
   carries the `anthropic-workspace-id` header. A key that is not scoped to a workspace needs
   it; without it the API answers HTTP 400. No id, or settings without the interface, sends no
   header. The id is redacted from error detail like the key. OpenAI and Gemini ignore it.
+- Web reading (`ProviderCapability::WebReading`): a request with `WebReadingOptions` adds the
+  `web_fetch` server tool after the caller's tools, as `web_fetch_20260209` (dynamic filtering:
+  the API may run code to trim a page before it enters the context) or `web_fetch_20250910` on
+  Haiku and models before Opus and Sonnet 4.6. No beta header is needed and there is no
+  charge beyond the tokens the page adds. The API only fetches URLs that already appear in a
+  user message or an earlier result, never one that appears only in the model's own text. The
+  `server_tool_use` blocks and their `..._tool_result` blocks (including code execution
+  results from dynamic filtering, and fetch errors, which arrive as a result whose content is
+  `web_fetch_tool_result_error`) become `ServerToolBlock`s holding the API's block unchanged
+  and are replayed exactly. `pause_turn` maps to `StopReason::PauseTurn`. An organisation can
+  also restrict or turn off web fetch in the Claude Console; a request then gets a
+  `url_not_allowed` error result rather than an HTTP error.
 
 ## OpenAI
 
@@ -215,9 +227,10 @@ large results, schema delivery (within each dialect) and system prompt placement
 | System prompt | top-level `system` blocks | leading `developer` message | `systemInstruction` parts |
 | Prompt caching | explicit `cache_control` breakpoint after the static prefix, plus automatic caching of the conversation when asked; reads and writes reported | automatic prefix caching plus `prompt_cache_key`; reads and writes reported | implicit caching on a stable prefix; reads reported, writes not |
 | Token accounting | input excludes cache | prompt includes cache (subtracted) | prompt includes cache (subtracted); thoughts added to output |
-| Stop reasons | `end_turn`, `tool_use`, `max_tokens`; `refusal`, `pause_turn`, `stop_sequence` become Other | `stop`, `tool_calls`, `length`; `content_filter` and refusals become Other | `STOP` (ToolUse when calls are present), `MAX_TOKENS`; `SAFETY`, `RECITATION`, `MALFORMED_FUNCTION_CALL` and the rest become Other |
+| Stop reasons | `end_turn`, `tool_use`, `max_tokens`, `pause_turn` (PauseTurn); `refusal`, `stop_sequence` become Other | `stop`, `tool_calls`, `length`; `content_filter` and refusals become Other | `STOP` (ToolUse when calls are present), `MAX_TOKENS`; `SAFETY`, `RECITATION`, `MALFORMED_FUNCTION_CALL` and the rest become Other |
 | Errors beyond the shared mapping | 529 overloaded is transient | 429 `insufficient_quota` is blocking | 400 `API_KEY_INVALID` and `FAILED_PRECONDITION` are blocking |
 | Reasoning control | `output_config.effort` | `reasoning_effort` | `thinkingConfig.thinkingLevel` |
+| Web reading (`WebReadingOptions`) | `web_fetch` server tool; calls and results as `ServerToolBlock` | not supported; option ignored | not supported; option ignored |
 | Image input (`ImageBlock`) | `image` block with a `base64` source in a user message | `image_url` content part holding a data URI; the user message becomes a parts array | `inlineData` part with `mimeType` and `data` |
 
 What this means in practice: a conversation can move between providers (ids are opaque
