@@ -33,10 +33,12 @@ use SilverstripeLtd\AiCore\Settings\ProviderSettingsInterface;
  * transient; everything else (other 4xx, unreadable bodies) is permanent. Subclasses refine
  * this for vendor specific bodies such as an exhausted quota or an invalid key sent as 400.
  *
+ * No built-in capability is offered unless a subclass says so in supports().
+ *
  * A failed response's retry hint (the retry-after-ms or retry-after header, in seconds or
  * as a date) is carried on the exception; subclasses may read it from the body instead.
  */
-abstract class HttpChatProvider implements SettingsAwareProviderInterface
+abstract class HttpChatProvider implements SettingsAwareProviderInterface, CapabilityAwareProviderInterface
 {
 
     use Injectable;
@@ -88,6 +90,11 @@ abstract class HttpChatProvider implements SettingsAwareProviderInterface
      * @throws ProviderException When the body lacks what a reply needs.
      */
     abstract protected function parse(array $data): ChatResponse;
+
+    public function supports(ProviderCapability $capability): bool
+    {
+        return false;
+    }
 
     public function withSettings(ProviderSettingsInterface $settings): static
     {

@@ -10,10 +10,12 @@ use SilverstripeLtd\AiCore\Provider\Message\ChatOptions;
 use SilverstripeLtd\AiCore\Provider\Message\ChatRequest;
 use SilverstripeLtd\AiCore\Provider\Message\ImageBlock;
 use SilverstripeLtd\AiCore\Provider\Message\Role;
+use SilverstripeLtd\AiCore\Provider\Message\ServerToolBlock;
 use SilverstripeLtd\AiCore\Provider\Message\TextBlock;
 use SilverstripeLtd\AiCore\Provider\Message\ToolResultBlock;
 use SilverstripeLtd\AiCore\Provider\Message\ToolSchema;
 use SilverstripeLtd\AiCore\Provider\Message\ToolUseBlock;
+use SilverstripeLtd\AiCore\Provider\Message\WebReadingOptions;
 use SilverstripeLtd\AiCore\Provider\Schema\AnthropicSchemaDialect;
 use SilverstripeLtd\AiCore\Provider\Schema\SchemaDialectInterface;
 use SilverstripeLtd\AiCore\Provider\ToolNameCodec;
@@ -34,6 +36,12 @@ use stdClass;
  * the four breakpoints a request may use.
  * Images travel as base64 image blocks in user messages; the API refuses them from the
  * assistant, so an image in an assistant message is dropped.
+ *
+ * When the request asks for web reading, the web fetch server tool is added to the tools:
+ * the dynamic filtering version (WEB_FETCH_TOOL) on models that have it, the basic version on
+ * older ones and Haiku. The API only fetches URLs that already appear in the conversation.
+ * Server tool blocks from earlier replies (see ResponseParser) are sent back exactly as they
+ * were received; blocks another provider produced are left out.
  */
 final class RequestMapper
 {
@@ -42,6 +50,20 @@ final class RequestMapper
     private const array CACHE_CONTROL = ['type' => 'ephemeral'];
     private const array TOOL_CHOICE_AUTO = ['type' => 'auto'];
     private const string SOURCE_BASE64 = 'base64';
+
+    /** The web fetch tool with dynamic filtering, for Opus and Sonnet 4.6 and later. */
+    public const string WEB_FETCH_TOOL = 'web_fetch_20260209';
+
+    /** The basic web fetch tool, for models without dynamic filtering. */
+    public const string WEB_FETCH_TOOL_BASIC = 'web_fetch_20250910';
+
+    public const string WEB_FETCH_NAME = 'web_fetch';
+
+    /**
+     * Models that only have the basic web fetch tool: Claude 3, every Haiku, and Opus or
+     * Sonnet 4 up to 4.5 (with or without a date suffix).
+     */
+    private const string BASIC_WEB_FETCH_MODELS = '/^claude-(?:3|haiku|(?:opus|sonnet)-4(?:-[0-5])?(?:-\d{8})?$)/';
 
     private readonly SchemaDialectInterface $dialect;
 
@@ -67,8 +89,14 @@ final class RequestMapper
             $payload['system'] = $system;
         }
 
-        if ($request->tools !== []) {
-            $payload['tools'] = array_map(fn (ToolSchema $tool): array => $this->mapTool($tool), $request->tools);
+        $tools = array_map(fn (ToolSchema $tool): array => $this->mapTool($tool), $request->tools);
+
+        if ($request->webReading !== null) {
+            $tools[] = self::webFetchTool($request->webReading, $options->model);
+        }
+
+        if ($tools !== []) {
+            $payload['tools'] = $tools;
             $payload['tool_choice'] = self::TOOL_CHOICE_AUTO;
         }
 
@@ -120,6 +148,37 @@ final class RequestMapper
         }
 
         return $blocks;
+    }
+
+    /**
+     * The web fetch server tool definition for the model, with the caller's limits.
+     *
+     * @return array<string, mixed>
+     */
+    public static function webFetchTool(WebReadingOptions $options, string $model): array
+    {
+        $tool = [
+            'type' => preg_match(self::BASIC_WEB_FETCH_MODELS, $model) === 1
+                ? self::WEB_FETCH_TOOL_BASIC
+                : self::WEB_FETCH_TOOL,
+            'name' => self::WEB_FETCH_NAME,
+        ];
+
+        if ($options->maxUses !== null && $options->maxUses > 0) {
+            $tool['max_uses'] = $options->maxUses;
+        }
+
+        if ($options->allowedDomains !== []) {
+            $tool['allowed_domains'] = $options->allowedDomains;
+        } elseif ($options->blockedDomains !== []) {
+            $tool['blocked_domains'] = $options->blockedDomains;
+        }
+
+        if ($options->maxContentTokens !== null && $options->maxContentTokens > 0) {
+            $tool['max_content_tokens'] = $options->maxContentTokens;
+        }
+
+        return $tool;
     }
 
     /**
@@ -222,6 +281,12 @@ final class RequestMapper
                     ? new stdClass()
                     : $block->input,
             ];
+        }
+
+        if ($block instanceof ServerToolBlock) {
+            return $block->provider === AnthropicProvider::NAME && $block->raw !== []
+                ? $block->raw
+                : null;
         }
 
         if ($block instanceof ToolResultBlock) {

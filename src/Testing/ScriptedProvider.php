@@ -6,16 +6,19 @@ namespace SilverstripeLtd\AiCore\Testing;
 
 use Closure;
 use SilverStripe\Core\Injector\Injectable;
-use SilverstripeLtd\AiCore\Provider\ChatProviderInterface;
+use SilverstripeLtd\AiCore\Provider\CapabilityAwareProviderInterface;
 use SilverstripeLtd\AiCore\Provider\Message\ChatMessage;
 use SilverstripeLtd\AiCore\Provider\Message\ChatOptions;
 use SilverstripeLtd\AiCore\Provider\Message\ChatRequest;
 use SilverstripeLtd\AiCore\Provider\Message\ChatResponse;
 use SilverstripeLtd\AiCore\Provider\Message\Role;
+use SilverstripeLtd\AiCore\Provider\Message\ServerToolBlock;
+use SilverstripeLtd\AiCore\Provider\Message\ServerToolPart;
 use SilverstripeLtd\AiCore\Provider\Message\StopReason;
 use SilverstripeLtd\AiCore\Provider\Message\TextBlock;
 use SilverstripeLtd\AiCore\Provider\Message\ToolUseBlock;
 use SilverstripeLtd\AiCore\Provider\Message\Usage;
+use SilverstripeLtd\AiCore\Provider\ProviderCapability;
 use SilverstripeLtd\AiCore\Provider\ProviderException;
 
 /**
@@ -26,8 +29,11 @@ use SilverstripeLtd\AiCore\Provider\ProviderException;
  * scripted test fails loudly: an empty queue throws unless fallbackToCanned is set, in which
  * case the provider greets and echoes so a UI works with no API key at all. The greeting and
  * the note can be replaced through the constructor, typically from Injector YAML.
+ *
+ * It offers no built-in capability until a test turns one on with enable(), and webReading()
+ * builds a reply in which the provider read a web page itself.
  */
-class ScriptedProvider implements ChatProviderInterface
+class ScriptedProvider implements CapabilityAwareProviderInterface
 {
 
     use Injectable;
@@ -44,6 +50,7 @@ class ScriptedProvider implements ChatProviderInterface
     private const int DEFAULT_TIMEOUT_SECONDS = 1;
     private const string TOOL_USE_ID_PREFIX = 'toolu_scripted_';
     private const string MESSAGE_ID_PREFIX = 'msg_scripted_';
+    private const string SERVER_TOOL_ID_PREFIX = 'srvtoolu_scripted_';
 
     private static int $sequence = 0;
 
@@ -61,6 +68,11 @@ class ScriptedProvider implements ChatProviderInterface
      * Reply used for every request once the queue is empty, set by always().
      */
     private ChatResponse|Closure|null $always = null;
+
+    /**
+     * @var array<string, ProviderCapability>
+     */
+    private array $capabilities = [];
 
     /**
      * @param array<int, ChatResponse|Closure> $responses Replayed in order; a Closure receives
@@ -183,14 +195,32 @@ class ScriptedProvider implements ChatProviderInterface
         return count($this->queue);
     }
 
+    public function supports(ProviderCapability $capability): bool
+    {
+        return isset($this->capabilities[$capability->value]);
+    }
+
     /**
-     * Clears both the queue and the recorded requests.
+     * Offers built-in capabilities until reset().
+     */
+    public function enable(ProviderCapability ...$capabilities): static
+    {
+        foreach ($capabilities as $capability) {
+            $this->capabilities[$capability->value] = $capability;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Clears the queue, the recorded requests and any enabled capability.
      */
     public function reset(): static
     {
         $this->queue = [];
         $this->requests = [];
         $this->always = null;
+        $this->capabilities = [];
 
         return $this;
     }
@@ -201,6 +231,34 @@ class ScriptedProvider implements ChatProviderInterface
     public static function text(string $text): ChatResponse
     {
         return self::response([new TextBlock($text)], StopReason::EndTurn);
+    }
+
+    /**
+     * A reply in which the provider read a web page on its own servers and then answered:
+     * the call, its result (an error when $failed) and the reply text.
+     */
+    public static function webReading(string $url, string $pageText, string $reply, bool $failed = false): ChatResponse
+    {
+        $id = self::nextId(self::SERVER_TOOL_ID_PREFIX);
+        $tool = ProviderCapability::WebReading->value;
+        $input = ['url' => $url];
+        $result = $failed
+            ? ['error' => 'url_not_accessible']
+            : ['url' => $url, 'text' => $pageText];
+
+        return self::response([
+            new ServerToolBlock(self::NAME, ServerToolPart::Call, $id, $tool, ['id' => $id, 'input' => $input], $input),
+            new ServerToolBlock(
+                self::NAME,
+                ServerToolPart::Result,
+                $id,
+                $tool,
+                ['tool_use_id' => $id, 'content' => $result],
+                [],
+                $failed,
+            ),
+            new TextBlock($reply),
+        ], StopReason::EndTurn);
     }
 
     /**

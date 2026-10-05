@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Web reading: `ProviderCapability::WebReading`, `CapabilityAwareProviderInterface::supports()`
+  (HTTP providers offer nothing by default) and `ChatRequest::$webReading`
+  (`WebReadingOptions`: max uses, blocked or allowed domains, max content tokens). Anthropic
+  sends its web fetch server tool (`web_fetch_20260209`, or `web_fetch_20250910` on Haiku and
+  models before 4.6); OpenAI and Gemini report it as unavailable. Server tool blocks in a reply
+  become `ServerToolBlock`s that keep the vendor's block unchanged and are sent back as they
+  were by the provider that made them, and left out by others. `StopReason::PauseTurn` reports
+  a paused server side turn. `ScriptedProvider::enable()` and `ScriptedProvider::webReading()`
+  script both in tests.
+
 - Anthropic workspaces: the optional `WorkspaceSettingsInterface::getWorkspaceId()` (kept
   separate so existing `ProviderSettingsInterface` implementations need no change), implemented
   by `EnvProviderSettings` from `AI_<MODULE>_WORKSPACE_ID`, the shared `AI_WORKSPACE_ID` (only

@@ -8,6 +8,7 @@ use GuzzleHttp\ClientInterface;
 use SilverstripeLtd\AiCore\Provider\HttpChatProvider;
 use SilverstripeLtd\AiCore\Provider\Message\ChatRequest;
 use SilverstripeLtd\AiCore\Provider\Message\ChatResponse;
+use SilverstripeLtd\AiCore\Provider\ProviderCapability;
 use SilverstripeLtd\AiCore\Settings\ProviderSettingsInterface;
 use SilverstripeLtd\AiCore\Settings\WorkspaceSettingsInterface;
 
@@ -20,6 +21,9 @@ use SilverstripeLtd\AiCore\Settings\WorkspaceSettingsInterface;
  * When the settings implement WorkspaceSettingsInterface and name a workspace, every request
  * carries it in the anthropic-workspace-id header (needed for a key that is not scoped to a
  * workspace). The workspace id is redacted from error detail like the key.
+ *
+ * Web reading runs on Anthropic's servers through its web fetch tool: see RequestMapper for
+ * the request and ResponseParser for the blocks that come back.
  */
 class AnthropicProvider extends HttpChatProvider
 {
@@ -48,6 +52,11 @@ class AnthropicProvider extends HttpChatProvider
     public function getName(): string
     {
         return self::NAME;
+    }
+
+    public function supports(ProviderCapability $capability): bool
+    {
+        return $capability === ProviderCapability::WebReading;
     }
 
     protected function getLabel(): string
